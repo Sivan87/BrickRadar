@@ -56,7 +56,9 @@ jobs:
             -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.jks" \
             -PRELEASE_STORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
             -PRELEASE_KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
-            -PRELEASE_KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
+            -PRELEASE_KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}" \
+            -PAPI_BASE_URL="${{ secrets.API_BASE_URL }}" \
+            -PAPI_KEY="${{ secrets.API_KEY }}"
 
       # [skip ci] förhindrar att den här pushen triggar workflowet på nytt
       # (GitHub hoppar native över körningar vars HEAD-commit-meddelande

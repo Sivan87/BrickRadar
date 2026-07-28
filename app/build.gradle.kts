@@ -10,6 +10,14 @@ val releaseStorePassword = project.findProperty("RELEASE_STORE_PASSWORD") as Str
 val releaseKeyAlias = project.findProperty("RELEASE_KEY_ALIAS") as String?
 val releaseKeyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as String?
 
+// Serverns bas-URL/API-nyckel - lokalt i gradle.properties (gitignorad) eller
+// via -P i CI (release.yml), aldrig hårdkodat i källkoden (se CLAUDE.md
+// "Serverkonfiguration" och issue #2 i Sivan87/BrickRadar).
+val apiBaseUrl = project.findProperty("API_BASE_URL") as String?
+    ?: throw GradleException("API_BASE_URL saknas - se CLAUDE.md \"Serverkonfiguration\"")
+val apiKey = project.findProperty("API_KEY") as String?
+    ?: throw GradleException("API_KEY saknas - se CLAUDE.md \"Serverkonfiguration\"")
+
 // version.properties är den enda källan till sanning för versionCode/versionName
 // (se CLAUDE.md, "Release build") — höjs automatiskt här vid assembleRelease
 // istället för att redigeras manuellt.
@@ -59,6 +67,9 @@ android {
         versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "API_KEY", "\"$apiKey\"")
     }
 
     signingConfigs {
