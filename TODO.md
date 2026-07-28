@@ -76,7 +76,16 @@
 - [ ] Installera den "nya" versionen via flödet, starta om appen, bekräfta att uppdateringsdialogen INTE dyker upp igen (versionCode matchar nu)
 - [ ] Bekräfta att telefonen faktiskt kräver ett godkännande-tryck för installationen (Android-säkerhetskrav, ingen tyst installation) och att appdata bevaras efteråt (samma keystore, se "Release build" i CLAUDE.md)
 
+## Fas 10 — Statistik-flik, klart (kod), kräver fysisk enhet/emulator för verifiering (inte gjort av Claude)
+- [x] Bottennavens "Priser"-flik omdöpt till "Statistik", `enabled = true`, ny route `statistik` i `MainActivity`
+- [x] Ny `StatistikScreen`/`StatistikViewModel`, återanvänder befintligt `GET /api/stats` (`avgKrPerPieceCloneAll`/`avgKrPerPieceLegoAll`), inga backend- eller DTO-ändringar behövdes
+- [x] `assembleDebug` går igenom
+- [ ] Bygg och kör på enhet: tryck "Statistik" i bottennaven, bekräfta att skärmen öppnas och stängs (tillbaka-pilen) korrekt
+- [ ] Bekräfta att de visade kr/del-snitten (Klon/LEGO) matchar samma siffror som webb-UI:ts statistikvy för samma data
+- [ ] Stäng av Flask-servern tillfälligt, öppna Statistik-fliken, bekräfta felvyn + att "Försök igen" fungerar när servern kommer tillbaka
+- [ ] Bekräfta att "Mer"-fliken fortfarande är nedtonad/inaktiv och inte råkade aktiveras av misstag
+
 ## Nästa faser
 - [ ] MOC-hantering utöver "Generic"-märket (t.ex. egen bilduppladdning)
-- [ ] VPN/Unraid-åtkomst + inställningsskärm för server-IP/nyckel (ersätter hårdkodade konstanter i `ApiConfig.kt`)
+- [ ] VPN/Unraid-åtkomst + inställningsskärm för server-IP/nyckel (ersätter `BuildConfig`-värdena i `ApiConfig.kt` — flyttades dit från hårdkodade konstanter 2026-07-28, se issue #2 och CLAUDE.md "Serverkonfiguration", men kräver fortfarande ett ombygge för varje IP/nyckel-byte tills detta görs)
 - [ ] Manuell prisuppdatering (`POST .../refresh`) från detaljvyn

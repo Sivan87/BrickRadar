@@ -14,6 +14,7 @@ import androidx.navigation.navArgument
 import com.sivan.brickradar.ui.AddModelScreen
 import com.sivan.brickradar.ui.ModelDetailScreen
 import com.sivan.brickradar.ui.ModelListScreen
+import com.sivan.brickradar.ui.StatistikScreen
 import com.sivan.brickradar.ui.UpdateChecker
 import com.sivan.brickradar.ui.theme.BrickRadarTheme
 
@@ -39,12 +40,16 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate("modelDetail/$modelId")
                                 },
                                 onAddModelClick = { navController.navigate("addModel") },
+                                onStatistikClick = { navController.navigate("statistik") },
                                 modelCreatedFlow = backStackEntry.savedStateHandle
                                     .getStateFlow(MODEL_CREATED_KEY, false),
                                 onModelCreatedConsumed = {
                                     backStackEntry.savedStateHandle[MODEL_CREATED_KEY] = false
                                 },
                             )
+                        }
+                        composable("statistik") {
+                            StatistikScreen(onBack = { navController.popBackStack() })
                         }
                         composable(
                             route = "modelDetail/{modelId}",

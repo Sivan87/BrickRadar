@@ -112,6 +112,7 @@ private val SORT_OPTIONS: List<Pair<SortOption, String>> = listOf(
 fun ModelListScreen(
     onModelClick: (Int) -> Unit,
     onAddModelClick: () -> Unit,
+    onStatistikClick: () -> Unit,
     // Signal från "Lägg till modell" (Fas 6) via NavBackStackEntry.savedStateHandle
     // (satt av MainActivity) — true precis efter en lyckad skapelse. Konsumeras
     // (sätts tillbaka till false) av onModelCreatedConsumed så den inte triggar
@@ -140,7 +141,7 @@ fun ModelListScreen(
     Scaffold(
         containerColor = AppBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = { BottomNavBar(onAddModelClick = onAddModelClick) },
+        bottomBar = { BottomNavBar(onAddModelClick = onAddModelClick, onStatistikClick = onStatistikClick) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             ListHeader(viewMode = viewMode, onViewModeChange = viewModel::setViewMode)
@@ -570,7 +571,7 @@ private fun contextNote(model: Model): String {
 }
 
 @Composable
-private fun BottomNavBar(onAddModelClick: () -> Unit) {
+private fun BottomNavBar(onAddModelClick: () -> Unit, onStatistikClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -580,7 +581,7 @@ private fun BottomNavBar(onAddModelClick: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
             BottomNavItem(glyph = "◎", label = "Sets", active = true, enabled = true, onClick = {})
             BottomNavItem(glyph = "+", label = "Lägg till", active = false, enabled = true, onClick = onAddModelClick)
-            BottomNavItem(glyph = "⟳", label = "Priser", active = false, enabled = false, onClick = {})
+            BottomNavItem(glyph = "⟳", label = "Statistik", active = false, enabled = true, onClick = onStatistikClick)
             BottomNavItem(glyph = "≡", label = "Mer", active = false, enabled = false, onClick = {})
         }
         Box(
