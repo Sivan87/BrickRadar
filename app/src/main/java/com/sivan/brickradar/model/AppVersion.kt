@@ -2,11 +2,11 @@ package com.sivan.brickradar.model
 
 import com.squareup.moshi.Json
 
-// Speglar svaret från GET /api/app-version (mould-king-tracker: api.py,
-// api_app_version) — läser version.json på servern, skrivet av
-// publish-update.py. downloadUrl byggs server-side från request.host_url,
-// pekar alltså alltid på rätt LAN-IP oavsett vad ApiConfig.BASE_URL är satt
-// till just nu.
+// Appens interna representation av "senaste tillgängliga version" — byggs i
+// ModelRepository.getAppVersion() av GitHubReleaseResponse (GET
+// /repos/Sivan87/BrickRadar/releases/latest), inte längre av vår egen server
+// (se issue #1 i Sivan87/BrickRadar). downloadUrl pekar direkt på GitHubs
+// browser_download_url för release-APK:n.
 data class AppVersionResponse(
     @Json(name = "versionCode") val versionCode: Int,
     @Json(name = "versionName") val versionName: String,

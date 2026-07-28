@@ -32,9 +32,9 @@ Källa: ett claude.ai/design-projekt (`Klonradarn Design Options.dc.html`, impor
 - **App-ikon:** riktig launcher-ikon (kugghjul/≠, källfil ursprungligen `Designer.png`) ersätter Android-standardroboten, som adaptiv ikon (förgrund: kugghjulet, transparent, centrerat inom Androids säkerhetszon; bakgrund: `@color/ic_launcher_background` = `#0D0D0D`, ny färg i `values/colors.xml`). Projektets `mipmap-anydpi`-mapp (ingen `-v26`-suffix i det här projektet, ofarligt eftersom `minSdk = 26` redan är golvet — adaptiv ikon är alltså allt som någonsin laddas) pekade tidigare på tomma Android Studio-standardvektorer (`@drawable/ic_launcher_background`/`ic_launcher_foreground`) — dessa är borttagna, `ic_launcher.xml`/`ic_launcher_round.xml` pekar nu istället mot `@mipmap/ic_launcher_foreground` (samma PNG i alla dpi-mappar) + färgresursen. De gamla legacy `.webp`-ikonerna (mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi, för <API 26, aldrig faktiskt använda här) är också borttagna för att undvika en dubblett-resurskonflikt med de nya `ic_launcher.png`/`ic_launcher_round.png`-filerna i samma mappar.
 
 ## Fas 9 — Auto-update (in-app uppdateringskoll)
-Appen kollar nu själv om det finns en nyare version på servern, istället för att varje uppdatering krävt manuell överföring+installation av en ny APK (se "Release build"/"Så här uppdaterar du appen" ovan, som fortfarande gäller för själva byggsteget — Fas 9 automatiserar bara distributionen/installationsprompten därefter).
-- **Server-sidan** (`mould-king-tracker`, se det projektets CLAUDE.md, avsnittet "App-uppdatering"): `version.json` + `static/downloads/brickradar-latest.apk` + `GET /api/app-version` + `publish-update.py`. Ingen ändring behövdes i appens `ApiConfig`/`RetrofitClient` — samma bas-URL/API-nyckel-mekanism som allt annat.
-- `network/BrickRadarApi.kt`: `getAppVersion()` (`GET /api/app-version`) → `AppVersionResponse` (`model/AppVersion.kt`: `versionCode`/`versionName`/`releaseNotes`/`downloadUrl`). `repository/ModelRepository.kt`: `getAppVersion()`, samma `safeCall`/`ApiResult`-mönster som resten av repositoryt — **fail-silent-kravet hanteras av anroparen** (`UpdateViewModel` ignorerar `ApiResult.Error` helt), inte av repositoryt/`safeCall` självt.
+Appen kollar nu själv om det finns en nyare version, istället för att varje uppdatering krävt manuell överföring+installation av en ny APK (se "Release build"/"Så här uppdaterar du appen" ovan, som fortfarande gäller för själva byggsteget — Fas 9 automatiserar bara distributionen/installationsprompten därefter).
+- **Byggdes ursprungligen mot en egen server-endpoint (`mould-king-tracker`s `GET /api/app-version`/`version.json`/`publish-update.py`), men byter 2026-07-28 (issue #1 i Sivan87/BrickRadar) till att anropa GitHub Releases direkt** — se `network/GitHubReleasesApi.kt`/`RetrofitClient.githubApi` nedan och "Så här uppdaterar du appen" längre ner för den fullständiga bakgrunden/motiveringen. Servern har inte längre någon roll i uppdateringskollen alls.
+- `network/GitHubReleasesApi.kt`: `getLatestRelease()` (`GET https://api.github.com/repos/Sivan87/BrickRadar/releases/latest`, ingen autentisering — publikt repo) → `GitHubReleaseResponse` (`model/GitHubRelease.kt`: `tagName`/`body`/`assets`). Går via en EGEN `Retrofit`-instans (`RetrofitClient.githubApi`, egen `OkHttpClient` utan `apiKeyInterceptor`n) — `X-API-Key` ska aldrig skickas till GitHub, den hör bara hemma på anrop mot vår egen server. `repository/ModelRepository.kt`: `getAppVersion()` bygger nu själv en `AppVersionResponse` (`model/AppVersion.kt`, oförändrad form) av GitHub-svaret — `versionCode` parsas ur `versionName`s sista `.`-segment (samma tolkning som serverns gamla `_fetch_latest_github_release`/`api_app_version` gjorde), `downloadUrl` blir asset-objektets egna `browser_download_url`. Samma `safeCall`/`ApiResult`-mönster som resten av repositoryt — **fail-silent-kravet hanteras fortfarande av anroparen** (`UpdateViewModel` ignorerar `ApiResult.Error` helt), inte av repositoryt/`safeCall` självt. `BrickRadarApi.getAppVersion()` (den gamla server-endpointen) är borttagen, ingen kod anropar den längre.
 - `viewmodel/UpdateViewModel.kt` — **`AndroidViewModel`, inte den vanliga `ViewModel`-basklassen** appens övriga ViewModels ärver (`ModelListViewModel` m.fl.), eftersom `DownloadManager`/`FileProvider`/`PackageManager` alla kräver en `Context`; `application`-context räcker (ingen `Activity`-referens hålls, ingen läckrisk vid rotation). Fungerar ändå med samma `viewModel()`-composable-funktion som resten av appen redan använder (Compose Navigations default `SavedStateViewModelFactory` kan instansiera `AndroidViewModel`-subklasser reflektivt via en `(Application)`-konstruktor, ingen egen `ViewModelProvider.Factory` behövdes).
   - `checkForUpdate()` körs en gång i `init` (dvs. en gång per appstart, inte per skärmbesök): jämför svarets `versionCode` mot `BuildConfig.VERSION_CODE`. **Kräver `buildFeatures { buildConfig = true }`** i `app/build.gradle.kts` — avstängt som default sedan AGP 8, annars finns `BuildConfig`-klassen inte alls och koden kompilerar inte (bekräftat, första `assembleDebug`-försöket denna session gav `Unresolved reference 'BuildConfig'` tills flaggan lades till).
   - `startDownload()`: `DownloadManager.Request` mot `downloadUrl`, sparas som `brickradar-update.apk` i `getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)` (`setDestinationInExternalFilesDir`). En ev. tidigare nedladdad fil på samma sökväg raderas INNAN en ny nedladdning startas, så ett omtryck på "Uppdatera" (t.ex. efter att just ha beviljat installationsbehörighet) aldrig råkar installera en gammal/ofullständig fil.
@@ -44,7 +44,7 @@ Appen kollar nu själv om det finns en nyare version på servern, istället för
   - `canInstallPackages()`: `packageManager.canRequestPackageInstalls()`.
 - `ui/UpdateDialog.kt` (`UpdateChecker`-composable, anropad en gång från `MainActivity`, ovanpå `NavHost`): tre `AlertDialog`-varianter beroende på state — "Ny version tillgänglig" (visar `versionName`+`releaseNotes`, knappar Uppdatera/Senare), en förklarande "Tillåt installation"-dialog INNAN `Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES` öppnas (bara om `canInstallPackages()` är false när användaren trycker Uppdatera) via `rememberLauncherForActivityResult`, och nedladdnings-/feldialoger. **Kollar den faktiska behörigheten igen efter returnen** från inställningssidan istället för att lita på launcherns resultatkod — `ACTION_MANAGE_UNKNOWN_APP_SOURCES` returnerar `RESULT_CANCELED` på en del enheter även när användaren faktiskt beviljade behörigheten.
 - `AndroidManifest.xml`: `android.permission.REQUEST_INSTALL_PACKAGES` (krävs sedan API 26 för att appen själv ska få starta en installations-intent utan att användaren slår på "okända källor" globalt) + en `FileProvider`-deklaration (`${applicationId}.fileprovider`, `exported=false`) som pekar mot `res/xml/file_paths.xml` (nytt: en `<external-files-path name="update_downloads" path="Download/" />`, matchar exakt den mapp `setDestinationInExternalFilesDir(..., DIRECTORY_DOWNLOADS, ...)` skriver till — exponerar INTE hela lagringsutrymmet).
-- **Publicera en ny version** (efter `./gradlew assembleRelease`, se "Så här uppdaterar du appen" nedan): kör `publish-update.py` i `mould-king-tracker`-projektet. Nästa gång appen startar på hemma-WiFi dyker uppdateringsdialogen upp automatiskt — ingen ändring i Android-koden krävs per release.
+- **Publicera en ny version**: se "Så här uppdaterar du appen" nedan — sedan 2026-07-28 räcker en vanlig `git push` till `main`, ingen manuell server-publicering (`publish-update.py`, borttaget) längre. Uppdateringsdialogen dyker upp automatiskt nästa appstart, oavsett vilket nätverk telefonen är på (kräver inte längre hemma-WiFi, se nedan).
 - **Inte implementerat**: ingen exakt nedladdningsprocent (se ovan), ingen bakgrundskoll (kollar bara vid appstart, inte periodiskt medan appen är öppen), inget sätt att manuellt trigga en omkoll utan att starta om appen.
 
 ## Fas 10 — Statistik-flik (version 1: Klon- vs LEGO-snitt)
@@ -65,7 +65,7 @@ Bottennavens tredje flik hette tidigare "Priser" och var medvetet inaktiv (se Fa
 - Lägg till ny modell manuellt (Fas 6): "+"-FAB i listvyn öppnar `AddModelScreen` (formulär: Namn/Modellnummer/Märke/Delantal/Kategori/Status/Bildlänk). Validering: Namn, Märke och Delantal obligatoriska (Delantal måste vara positivt heltal), Spara blockerad tills korrekt. Sparar via `POST /api/models`, med ett uppföljande `PUT /api/models/{id}` om användaren valt en annan kategori än auto-gissningen (se avvikelse-anmärkningen om `category` i Arkitektur-avsnittet). Vid lyckad skapelse: navigerar tillbaka till listvyn, listan hämtas om och en Snackbar ("Modellen har lagts till") visas. Vid serverfel (t.ex. dubblett — 409, "brand krävs" — 400): Snackbar med serverns felmeddelande, formuläret stängs inte och ifyllda värden tappas inte. **Det kända delantal-problemet från webben** (manuellt tillagda modeller tillät bara namnredigering, inte delantal) **är inte relevant för Android** — `piece_count` skickas och sparas korrekt redan vid `POST /models` (bekräftat i `api.py: api_add_model` → `_parse_piece_count`), och efterföljande redigering av delantal gick redan genom `PUT /api/models/{id}` sedan Fas 3, som alltid tillåtit delantal. Inget appspecifikt workaround behövdes för detta.
 - Brick4-sökning vid modelltillägg (Fas 7): `AddModelScreen` har nu ett läge-val, "Sök modellnummer" (default) eller "Fyll i manuellt" (oförändrat Fas 6-flöde). I sökläget: skriv ett modellnummer, tryck sök → `GET /api/brick4/search-by-number` (befintligt backend-endpoint, ingen ändring i `mould-king-tracker`, se avvikelse-anmärkningen i Arkitektur-avsnittet). Noll träffar: felmeddelande + "Fyll i manuellt istället"-knapp som byter läge med numret redan ifyllt. Ett märke: visas direkt som ett kort med "Använd denna". Flera märken: alla visas som kort, användaren väljer rätt. Efter val: modellnummer+märke låses in, resten av fälten (namn/delantal/kategori/status/bildlänk) är samma som det manuella formuläret men namn/delantal är VALFRIA — lämnas de tomma fylls de i automatiskt av samma asynkrona bakgrundshämtning som redan körs för alla nya modeller med känt modellnummer (`initial_fetch`), precis som webbens motsvarande formulär. Uppföljande kategori-PUT (om vald kategori ≠ auto-gissning) skickar nu BARA category-fältet (`CategoryUpdateRequest`) för att inte riskera att skriva över namn/delantal bakgrundshämtningen redan hunnit sätta. **Ingen förhandsvisning av namn/bild/delantal innan modellen skapas** (till skillnad från kickoff-dokumentets ursprungliga vision) — se den utförliga avvikelse-anmärkningen i Arkitektur-avsnittet för varför (backend-svaret innehåller inte den datan förrän efter skapande).
 - Visuell redesign (Fas 8): mörkt tema, list-/rutvy med bottennav, detaljvyns värde-skala och kontextuella åtgärdsrad, samt borttagning av hel modell — se Arkitektur-avsnittets Fas 8-punkt för detaljer och medvetna avgränsningar (typsnitt, foldbar-stöd).
-- Auto-update (Fas 9): appen kollar `GET /api/app-version` en gång vid varje appstart, visar en dialog ("Ny version tillgänglig") om servern har en högre `versionCode`, laddar ner APK:n via `DownloadManager` och startar installations-intentet (med guide till "installera okända appar"-inställningen om behörigheten saknas) — se Fas 9-avsnittet ovan för detaljer. Servern publicerar en ny version via `publish-update.py` i `mould-king-tracker`.
+- Auto-update (Fas 9): appen kollar GitHub Releases (sedan 2026-07-28 — se Fas 9-avsnittet ovan) en gång vid varje appstart, visar en dialog ("Ny version tillgänglig") om senaste release har en högre `versionCode`, laddar ner APK:n via `DownloadManager` och startar installations-intentet (med guide till "installera okända appar"-inställningen om behörigheten saknas). Fungerar oavsett vilket nätverk telefonen är på, inte bara hemma-WiFi.
 - Statistik-flik (Fas 10, version 1): bottennavens "Statistik"-flik (tidigare inaktiv "Priser") navigerar till en egen skärm som visar övergripande kr/del-snitt för Klon respektive LEGO — se Fas 10-avsnittet ovan för detaljer och medvetna avgränsningar.
 
 ## INTE implementerat än
@@ -90,15 +90,16 @@ Kodet i Fas 3 (statusändring, redigering), Fas 4 (källhantering), Fas 5 (filte
 - **Installation på telefon:** överför `app-release.apk` (Google Drive/e-post/USB), öppna filen och tillåt "installera okända appar" för den app som öppnar den.
 - **Automatisk versionshöjning:** `versionCode`/`versionName` höjs numera automatiskt av `app/build.gradle.kts` vid `assembleRelease` — ingen manuell redigering i `build.gradle.kts` behövs längre. Enda källan till sanning är `version.properties` i projektroten (`VERSION_CODE=`/`VERSION_NAME=`, committas till git, till skillnad från `gradle.properties`). Build-scriptet läser filen vid varje Gradle-körning; bara om något av de begärda tasknamnen innehåller "Release" (dvs. `assembleRelease`, men även `bundleRelease`/`lintRelease` osv.) höjs `VERSION_CODE` med +1 och skrivs tillbaka, med `VERSION_NAME` satt till `"1.$VERSION_CODE"`. `assembleDebug` läser bara det aktuella värdet, höjer aldrig. Vill man se det nya versionsnumret utan att gissa: `cat version.properties` efter en `assembleRelease`-körning.
 
-## Så här uppdaterar du appen (GitHub-integration, sedan 2026-07-28)
-Release-processen är nu automatiserad end-to-end via GitHub Actions — se
-`brickradar-github-integration.md` för hela kickoff-specen och
-`mould-king-tracker`-projektets CLAUDE.md, avsnittet "App-uppdatering (Android
-auto-update)" och "GitHub-releaser (Del D)", för serverhalvan.
+## Så här uppdaterar du appen (GitHub-integration, sedan 2026-07-28; direkt-mot-GitHub sedan samma datum, issue #1)
+Release-processen är automatiserad end-to-end via GitHub Actions — se
+`brickradar-github-integration.md` för hela kickoff-specen (Del A–D). Sedan
+issue #1 i Sivan87/BrickRadar (samma dag, ett uppföljande arbete) är repot
+publikt och appen pratar med GitHub Releases API direkt — `mould-king-tracker`
+(servern) är inte längre inblandad i uppdateringskollen alls, se Fas 9-avsnittet
+ovan.
 
 1. **Committa och pusha till `main`** som vanligt (`git push origin main`).
-   Det är det ENDA manuella steget — ingen lokal `./gradlew assembleRelease`,
-   inget `publish-update.py`-anrop.
+   Det är det ENDA manuella steget.
 2. `.github/workflows/release.yml` triggas av pushen och gör resten
    automatiskt: höjer `VERSION_CODE`/`VERSION_NAME` i `version.properties`,
    bygger en signerad release-APK (keystore/lösenord från repots Actions
@@ -111,20 +112,23 @@ auto-update)" och "GitHub-releaser (Del D)", för serverhalvan.
    hoppar nu över sig själv när `CI=true` (satt automatiskt av Actions) — den
    höjer/skriver alltså bara `version.properties` vid en LOKAL
    `assembleRelease`, aldrig i CI, så versionen dubbelhöjs inte.
-4. Servern (`mould-king-tracker`) hämtar senaste release direkt från GitHub
-   API:et (`GET /api/app-version`, se det projektets CLAUDE.md) — ingen manuell
-   publiceringshandling där längre. Nästa gång appen startar på en telefon som
-   redan har en äldre version installerad, och den telefonen är på samma
-   hemma-WiFi som servern, dyker uppdateringsdialogen upp automatiskt (Fas 9).
+4. Appen själv (inte servern, se ändringen 2026-07-28 ovan) hämtar senaste
+   release direkt från `GET https://api.github.com/repos/Sivan87/BrickRadar/releases/latest`
+   (ingen autentisering, publikt repo) nästa gång den startar — oavsett vilket
+   nätverk telefonen är på, inte bara hemma-WiFi som tidigare. Ingen manuell
+   publiceringshandling behövs någonstans.
 
 **Förstagångsinstallation** (ingen tidigare version installerad än) görs
-fortfarande manuellt: ladda ner APK:n från GitHub-releasens assets (eller
-`/static/downloads/brickradar-latest.apk` på servern efter första hämtningen)
-och öppna filen på telefonen.
+fortfarande manuellt: ladda ner APK:n från GitHub-releasens assets och öppna
+filen på telefonen.
 
-**`publish-update.py` (i `mould-king-tracker`) är MEDVETET behållen, inte
-borttagen** — som en manuell nödlösning om GitHub Actions eller GitHub API:et
-skulle vara nere/onåbart. Den är inte längre del av det normala flödet ovan.
+**`mould-king-tracker`s gamla `GET /api/app-version`-endpoint, `publish-update.py`
+och `version.json` är borttagna** (issue #1, 2026-07-28) — de var en nödlösning
+för när repot var privat (appen kunde då inte anropa GitHub direkt utan en PAT,
+som bara servern hade). Nu när repot är publikt behövs mellanhanden inte
+längre. `GITHUB_RELEASES_TOKEN` i `mould-king-tracker/.env` är av samma skäl
+borttagen/inte längre använd av något — kan revokeras på GitHub om den inte
+redan är det.
 
 **Viktigt:**
 - Signeras APK:n med FEL keystore vägrar Android uppdatera och kräver

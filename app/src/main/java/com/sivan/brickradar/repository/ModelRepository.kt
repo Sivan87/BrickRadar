@@ -13,6 +13,7 @@ import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
 import com.sivan.brickradar.model.UpdateSourceRequest
 import com.sivan.brickradar.network.BrickRadarApi
+import com.sivan.brickradar.network.GitHubReleasesApi
 import com.sivan.brickradar.network.RetrofitClient
 import com.squareup.moshi.Json
 import java.io.IOException
@@ -20,6 +21,7 @@ import retrofit2.HttpException
 
 class ModelRepository(
     private val api: BrickRadarApi = RetrofitClient.api,
+    private val githubApi: GitHubReleasesApi = RetrofitClient.githubApi,
 ) {
     suspend fun getModels(
         status: String? = null,
@@ -42,12 +44,28 @@ class ModelRepository(
         api.getStats()
     }
 
+    // Hämtar direkt från GitHub Releases (publikt repo, issue #1) istället för
+    // vår egen /api/app-version — funkar därför oavsett hemma-WiFi eller inte.
     // Fail-silent-kravet (uppdateringskollen ska aldrig störa vanlig
-    // appanvändning om servern inte är nåbar) hanteras av ANROPAREN
+    // appanvändning om GitHub inte är nåbart) hanteras av ANROPAREN
     // (UpdateViewModel ignorerar ApiResult.Error helt) — safeCall/ApiResult
     // är samma väg som resten av repositoryt, ingen särbehandling behövs här.
     suspend fun getAppVersion(): ApiResult<AppVersionResponse> = safeCall {
-        api.getAppVersion()
+        val release = githubApi.getLatestRelease()
+        val versionName = release.tagName.removePrefix("v")
+        // Samma tolkning som backendens tidigare _fetch_latest_github_release/
+        // api_app_version: versionCode är det sista heltalet efter versionNamnets
+        // sista punkt (t.ex. "1.4" -> 4), matchar "1.$VERSION_CODE"-formatet
+        // app/build.gradle.kts/release-workflowet redan producerar.
+        val versionCode = versionName.substringAfterLast(".").toIntOrNull() ?: 0
+        val apkAsset = release.assets.firstOrNull { it.name.endsWith(".apk") }
+            ?: throw IOException("Senaste GitHub Release saknar en bifogad APK")
+        AppVersionResponse(
+            versionCode = versionCode,
+            versionName = versionName,
+            releaseNotes = release.body.orEmpty(),
+            downloadUrl = apkAsset.browserDownloadUrl,
+        )
     }
 
     suspend fun deleteModel(id: Int): ApiResult<Unit> = safeCall {

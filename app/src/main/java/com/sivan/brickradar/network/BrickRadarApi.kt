@@ -2,7 +2,6 @@ package com.sivan.brickradar.network
 
 import com.sivan.brickradar.model.AddModelRequest
 import com.sivan.brickradar.model.AddSourceRequest
-import com.sivan.brickradar.model.AppVersionResponse
 import com.sivan.brickradar.model.Brick4SearchResult
 import com.sivan.brickradar.model.CategoriesResponse
 import com.sivan.brickradar.model.CategoryUpdateRequest
@@ -83,10 +82,4 @@ interface BrickRadarApi {
 
     @DELETE("api/models/{id}/source-override/{source}")
     suspend fun deleteSourceOverride(@Path("id") modelId: Int, @Path("source") source: String): ResponseBody
-
-    // Ingen 404-hantering här — ett saknat version.json på servern (se
-    // ModelRepository.getAppVersion) blir en vanlig HttpException(404), samma
-    // väg som alla andra 404-svar i appen.
-    @GET("api/app-version")
-    suspend fun getAppVersion(): AppVersionResponse
 }
