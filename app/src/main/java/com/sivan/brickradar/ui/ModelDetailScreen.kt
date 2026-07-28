@@ -85,15 +85,15 @@ import com.sivan.brickradar.ui.theme.MonoFont
 import com.sivan.brickradar.ui.theme.NegativeRed
 import com.sivan.brickradar.ui.theme.PanelBackground
 import com.sivan.brickradar.ui.theme.PositiveGreen
-import com.sivan.brickradar.ui.theme.ScaleGold
-import com.sivan.brickradar.ui.theme.ScaleGreen
-import com.sivan.brickradar.ui.theme.ScaleRed
 import com.sivan.brickradar.ui.theme.ScreenBackground
 import com.sivan.brickradar.ui.theme.TextMuted
 import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
 import com.sivan.brickradar.ui.theme.TextPrimary
 import com.sivan.brickradar.ui.theme.TextSecondary
+import com.sivan.brickradar.util.classifyValue
+import com.sivan.brickradar.util.colorForValueRating
+import com.sivan.brickradar.util.valueLevelsFor
 import com.sivan.brickradar.viewmodel.ModelDetailEvent
 import com.sivan.brickradar.viewmodel.ModelDetailUiState
 import com.sivan.brickradar.viewmodel.ModelDetailViewModel
@@ -336,37 +336,14 @@ private fun HeroSection(model: Model) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Row(modifier = Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column {
-                Text(text = "VÄRDE / BIT", style = MaterialTheme.typography.labelSmall, color = TextMutedMore)
-                Text(
-                    text = model.bestKrPerPiece?.let { "%.2f kr".format(it) } ?: "— kr",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
-                    color = if (model.bestKrPerPiece != null) AccentGold else TextMutedMost,
-                )
-            }
-            StatusBadge(status = model.status)
+        Column(modifier = Modifier.padding(top = 14.dp)) {
+            Text(text = "VÄRDE / BIT", style = MaterialTheme.typography.labelSmall, color = TextMutedMore)
+            Text(
+                text = model.bestKrPerPiece?.let { "%.2f kr".format(it) } ?: "— kr",
+                style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
+                color = if (model.bestKrPerPiece != null) AccentGold else TextMutedMost,
+            )
         }
-    }
-}
-
-@Composable
-private fun StatusBadge(status: String) {
-    val label = STATUS_OPTIONS.firstOrNull { it.first == status }?.second ?: status
-    val (bg, border, text) = when (status) {
-        "new" -> Triple(AccentGold, AccentGold, AppBackground)
-        "owned" -> Triple(Color.Transparent, PositiveGreen, PositiveGreen)
-        "rejected" -> Triple(Color.Transparent, NegativeRed, NegativeRed)
-        else -> Triple(Color.Transparent, CardBorder, TextMuted)
-    }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(bg)
-            .border(width = 1.dp, color = border, shape = RoundedCornerShape(20.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(text = label.uppercase(), style = MaterialTheme.typography.labelMedium, color = text)
     }
 }
 
@@ -426,16 +403,40 @@ private fun SectionLabel(text: String) {
     )
 }
 
+// Bakgrundens färgband speglar de FASTA trösklarna (cyan/grön/gul/orange/röd
+// för klon, grön/gul/orange/röd för LEGO — se util/ValueRating.kt) istället
+// för en generisk 3-stopps grön→guld→röd-gradient utsträckt mellan vilka tre
+// värden som råkar finnas (det gamla beteendet, se issue #4 i Sivan87/
+// BrickRadar: "Snitt baren ... matchar inte färgen brick per kr enligt
+// modellen" — samma set kunde visuellt hamna i en annan färgzon beroende på
+// vad Klonsnitt/LEGO-snitt just då var, trots att kr/del-chippen på källrader/
+// listkort redan alltid färgas efter samma fasta trösklar). Domänen (0 till
+// maxV) skalas för att rymma både de faktiska värdena OCH hela den tillämpliga
+// stegen, så bandgränserna alltid representerar de RIKTIGA tröskelvärdena i
+// kr/del, inte en godtycklig andel av bredden.
 @Composable
 private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
     val thisValue = model.bestKrPerPiece ?: return
     val cloneAvg = stats?.avgKrPerPieceCloneAll
     val legoAvg = stats?.avgKrPerPieceLegoAll
+    val isOfficial = model.isOfficialSet
+    val levels = valueLevelsFor(isOfficial)
     val values = listOfNotNull(thisValue, cloneAvg, legoAvg)
-    val minV = (values.min() * 0.85)
-    val maxV = (values.max() * 1.15).coerceAtLeast(minV + 0.01)
+    val maxV = maxOf(values.max() * 1.15, levels.last().first * 1.15)
 
-    fun position(value: Double): Float = ((value - minV) / (maxV - minV)).coerceIn(0.0, 1.0).toFloat()
+    fun position(value: Double): Float = (value / maxV).coerceIn(0.0, 1.0).toFloat()
+
+    val tierBoundaries = levels.map { it.first } + listOf(maxV)
+    val tierColors = levels.map { colorForValueRating(it.second) } + listOf(colorForValueRating("red"))
+    val colorStops = mutableListOf<Pair<Float, Color>>()
+    var prevBoundary = 0.0
+    tierBoundaries.forEachIndexed { i, boundary ->
+        val color = tierColors[i]
+        colorStops.add((prevBoundary / maxV).toFloat() to color)
+        colorStops.add((boundary / maxV).toFloat() to color)
+        prevBoundary = boundary
+    }
+    val thisValueColor = colorForValueRating(model.bestValueRating ?: classifyValue(thisValue, isOfficial))
 
     Column {
         SectionLabel("VÄRDESKALA")
@@ -447,7 +448,7 @@ private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
                     .fillMaxWidth()
                     .height(9.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Brush.horizontalGradient(listOf(ScaleGreen, ScaleGold, ScaleRed))),
+                    .background(Brush.horizontalGradient(colorStops = colorStops.toTypedArray())),
             )
             cloneAvg?.let { v ->
                 Box(
@@ -476,7 +477,7 @@ private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
                     .width(12.dp)
                     .height(25.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(TextPrimary),
+                    .background(thisValueColor),
             )
         }
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -488,7 +489,7 @@ private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
             Text(
                 text = "Detta set %.2f".format(thisValue),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                color = TextPrimary,
+                color = thisValueColor,
             )
             Text(
                 text = "LEGO-snitt ${legoAvg?.let { "%.2f".format(it) } ?: "–"}",

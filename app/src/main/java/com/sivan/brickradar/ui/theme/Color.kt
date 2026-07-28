@@ -30,8 +30,22 @@ val TextDim = Color(0xFF5F666E)
 val PositiveGreen = Color(0xFF63C98A)
 val NegativeRed = Color(0xFFE0705E)
 
-val ScaleGreen = Color(0xFF4F8F68)
-val ScaleGold = Color(0xFFE8D24A)
-val ScaleRed = Color(0xFFE0705E)
+// Samma 5 kr/del-nivåer som webbens --cyan/--green/--amber/--orange/--red
+// (static/style.css) — ANVÄND FÖR ALLT som färgar en kr/del-siffra efter
+// tröskelmodellen (klon: cyan/grön/gul/orange/röd, LEGO: grön/gul/orange/röd,
+// se app.py: classify_value/CLONE_VALUE_LEVELS/LEGO_VALUE_LEVELS). Håll dessa
+// i synk med webbens hex-värden — de är inte bara en visuell tycka-smak-sak,
+// utan ska vara den ENDA sanningen om vad "bra pris" betyder i appen.
+val ValueCyan = Color(0xFF22D3EE)
+val ValueGreen = Color(0xFF4ADE80)
+val ValueYellow = Color(0xFFFFCE45)
+val ValueOrange = Color(0xFFFB923C)
+val ValueRed = Color(0xFFF87171)
+
+// Statuslistans "bevakar"-färg i webbens statistikvy (--blue, static/style.css)
+// — status-dot/bar-fill för de andra tre lägena återanvänder redan befintliga
+// AccentGold/ValueYellow ("sök"), PositiveGreen/ValueGreen ("äger") och
+// TextDim ("avslagen"), så bara denna saknades.
+val StatusWatchingBlue = Color(0xFF8B93FF)
 
 val HomeIndicator = Color(0x47FFFFFF) // rgba(255,255,255,0.28)

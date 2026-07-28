@@ -76,14 +76,21 @@
 - [ ] Installera den "nya" versionen via flödet, starta om appen, bekräfta att uppdateringsdialogen INTE dyker upp igen (versionCode matchar nu)
 - [ ] Bekräfta att telefonen faktiskt kräver ett godkännande-tryck för installationen (Android-säkerhetskrav, ingen tyst installation) och att appdata bevaras efteråt (samma keystore, se "Release build" i CLAUDE.md)
 
-## Fas 10 — Statistik-flik, klart (kod), kräver fysisk enhet/emulator för verifiering (inte gjort av Claude)
+## Fas 10 — Statistik-flik, verifierad mot emulator 2026-07-28
 - [x] Bottennavens "Priser"-flik omdöpt till "Statistik", `enabled = true`, ny route `statistik` i `MainActivity`
 - [x] Ny `StatistikScreen`/`StatistikViewModel`, återanvänder befintligt `GET /api/stats` (`avgKrPerPieceCloneAll`/`avgKrPerPieceLegoAll`), inga backend- eller DTO-ändringar behövdes
 - [x] `assembleDebug` går igenom
-- [ ] Bygg och kör på enhet: tryck "Statistik" i bottennaven, bekräfta att skärmen öppnas och stängs (tillbaka-pilen) korrekt
-- [ ] Bekräfta att de visade kr/del-snitten (Klon/LEGO) matchar samma siffror som webb-UI:ts statistikvy för samma data
+- [x] Bygg och kör på enhet: tryck "Statistik" i bottennaven, bekräfta att skärmen öppnas och stängs (tillbaka-pilen) korrekt — verifierat på emulator
+- [x] Bekräfta att de visade kr/del-snitten (Klon/LEGO) matchar samma siffror som webb-UI:ts statistikvy för samma data — jämfört mot rått `GET /api/stats`-svar, stämde exakt
 - [ ] Stäng av Flask-servern tillfälligt, öppna Statistik-fliken, bekräfta felvyn + att "Försök igen" fungerar när servern kommer tillbaka
-- [ ] Bekräfta att "Mer"-fliken fortfarande är nedtonad/inaktiv och inte råkade aktiveras av misstag
+- [x] Bekräfta att "Mer"-fliken fortfarande är nedtonad/inaktiv och inte råkade aktiveras av misstag
+
+## Fas 11 — issues #4/#5/#6 i Sivan87/BrickRadar, klart och verifierat mot emulator 2026-07-28
+- [x] Issue #4: `ValueScaleSection` (`ModelDetailScreen.kt`) ritar nu ett segmenterat cyan/grön/gul/orange/röd-band efter de FASTA klon-/LEGO-trösklarna (`util/ValueRating.kt`, speglar `app.py: classify_value`) istället för en relativ 3-färgsgradient; "Detta set"-texten/markören färgas efter `model.bestValueRating`. Verifierat live på modell "Ford GT" #10651 (samma modell som i buggrapportens skärmdump) — "Detta set 0.32" visas nu i cyan, matchande dess riktiga rating.
+- [x] Issue #5: Den icke-klickbara "SÖK"-pillen bredvid VÄRDE/BIT i detaljvyn borttagen (`StatusBadge`-composablen är helt borttagen). Verifierat live — badgen är borta, resten av headern oförändrad, riktig statusändring sker fortfarande via `StatusChipsRow` längre ner.
+- [x] Issue #6: `StatistikScreen`/`model/Stats.kt` modellerar och visar nu HELA `GET /api/stats`-svaret — statusfördelning, sex kort, Klon-/LEGO-snitt, värdefördelning bland bevakade, bästa fynd (klickbara, navigerar till detaljvy), märkesfördelning, kategorifördelning. Verifierat live: alla siffror jämförda fält-för-fält mot ett rått curl-anrop till `/api/stats` och stämde exakt; en klickad bästa-fynd-rad (JieStar #91102) navigerade korrekt till rätt modells detaljvy.
+- [ ] Stäng av Flask-servern tillfälligt med Statistik-fliken öppen, bekräfta felvyn/"Försök igen" (inte specifikt testat denna session, bara den lyckade laddningen)
+- [ ] Testa på fler skärmstorlekar/en fysisk enhet (bara verifierat på en 1080x2400-emulator denna session)
 
 ## Nästa faser
 - [ ] MOC-hantering utöver "Generic"-märket (t.ex. egen bilduppladdning)

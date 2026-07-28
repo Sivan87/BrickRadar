@@ -49,7 +49,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("statistik") {
-                            StatistikScreen(onBack = { navController.popBackStack() })
+                            StatistikScreen(
+                                onBack = { navController.popBackStack() },
+                                onModelClick = { modelId -> navController.navigate("modelDetail/$modelId") },
+                            )
                         }
                         composable(
                             route = "modelDetail/{modelId}",
