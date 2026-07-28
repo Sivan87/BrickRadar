@@ -1,0 +1,109 @@
+import java.util.Properties
+
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
+
+val releaseStoreFile = project.findProperty("RELEASE_STORE_FILE") as String?
+val releaseStorePassword = project.findProperty("RELEASE_STORE_PASSWORD") as String?
+val releaseKeyAlias = project.findProperty("RELEASE_KEY_ALIAS") as String?
+val releaseKeyPassword = project.findProperty("RELEASE_KEY_PASSWORD") as String?
+
+// version.properties är den enda källan till sanning för versionCode/versionName
+// (se CLAUDE.md, "Release build") — höjs automatiskt här vid assembleRelease
+// istället för att redigeras manuellt.
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = Properties().apply {
+    if (versionPropsFile.exists()) {
+        versionPropsFile.inputStream().use { load(it) }
+    }
+}
+val storedVersionCode = versionProps.getProperty("VERSION_CODE", "1").toInt()
+val isReleaseBuild = gradle.startParameter.taskNames.any { it.contains("Release") }
+
+val appVersionCode = if (isReleaseBuild) storedVersionCode + 1 else storedVersionCode
+val appVersionName = if (isReleaseBuild) "1.$appVersionCode" else versionProps.getProperty("VERSION_NAME", "1.0")
+
+if (isReleaseBuild) {
+    // Skriver rått istället för Properties.store(), som annars alltid
+    // lägger till en tidsstämpel-kommentarsrad högst upp i filen.
+    versionPropsFile.writeText("VERSION_CODE=$appVersionCode\nVERSION_NAME=$appVersionName\n")
+}
+
+android {
+    namespace = "com.sivan.brickradar"
+    compileSdk {
+        version = release(36) {
+            minorApiLevel = 1
+        }
+    }
+
+    buildFeatures {
+        compose = true
+        // Behövs uttryckligen sedan AGP 8 (BuildConfig-generering är
+        // avstängd som default) — UpdateViewModel jämför BuildConfig.VERSION_CODE
+        // mot servern.
+        buildConfig = true
+    }
+
+    defaultConfig {
+        applicationId = "com.sivan.brickradar"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = appVersionCode
+        versionName = appVersionName
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (releaseStoreFile != null) {
+                storeFile = file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            optimization {
+                enable = false
+            }
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.material)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.junit)
+    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.activity:activity-compose:1.9.2")
+
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-moshi:2.11.0")
+    implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("androidx.navigation:navigation-compose:2.8.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
+
+    // Inte med i kickoff-dokumentets beroendelista, men behövs för att visa
+    // modellbilder från image_url i listan/detaljvyn (se ModelListScreen/
+    // ModelDetailScreen) — standardvalet för bildladdning i Compose.
+    implementation("io.coil-kt:coil-compose:2.7.0")
+}

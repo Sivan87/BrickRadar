@@ -1,0 +1,31 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Innehåller release-signeringens lösenord (RELEASE_STORE_PASSWORD/RELEASE_KEY_PASSWORD) - committa aldrig.
+gradle.properties
+
+# Keystore-filer ska aldrig ligga i repot (den riktiga ligger utanför repot, i C:\Keys).
+*.jks
+*.keystore
+local.properties
+
+# Claude Code-verktygets egen runtime-state, inte projektkod.
+.claude/
+
+# Ovanliggande/privata filer i projektroten, oanvänt av bygget (t.ex. Skatteverket-relaterade
+# testfiler) - hör inte till BrickRadar-appen.
+Pelaretvatestfil.*
+konvertera.bat
+brickradar-app-icons.zip

@@ -1,0 +1,31 @@
+package com.sivan.brickradar.model
+
+import com.squareup.moshi.Json
+
+data class AddSourceRequest(
+    val source: String,
+    val price: Double,
+    val currency: String,
+    val url: String,
+    @Json(name = "in_stock") val inStock: Int?,
+    val warehouse: String?,
+)
+
+data class UpdateSourceRequest(
+    val price: Double,
+    val currency: String,
+    val url: String,
+    @Json(name = "in_stock") val inStock: Int?,
+    val warehouse: String?,
+)
+
+// POST/DELETE .../source-override — separat lagringsplats (model_source_overrides
+// i databasen) från själva prisraden. Leveranstid (delivery_estimate) går ALDRIG
+// att sätta via POST .../sources eller PUT .../sources/{id} (prices-tabellen har
+// ingen delivery_estimate-kolumn) — se kommentaren i ModelRepository.addSource.
+data class SourceOverrideRequest(
+    val source: String,
+    @Json(name = "in_stock") val inStock: Int?,
+    val warehouse: String?,
+    @Json(name = "delivery_estimate") val deliveryEstimate: String?,
+)

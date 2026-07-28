@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Exponerar bara den mapp UpdateViewModel faktiskt laddar ner APK:n till
+    (DownloadManager.Request.setDestinationInExternalFilesDir(context,
+    Environment.DIRECTORY_DOWNLOADS, ...) -> getExternalFilesDir("Download")),
+    inte hela lagringsutrymmet. FileProvider kräver detta för att kunna ge
+    installations-intentet en content://-URI istället för en rå file://-URI
+    (blockerad av Android sedan API 24/N för intents till andra appar).
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="update_downloads" path="Download/" />
+</paths>
