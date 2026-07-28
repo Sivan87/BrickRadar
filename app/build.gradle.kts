@@ -21,11 +21,15 @@ val versionProps = Properties().apply {
 }
 val storedVersionCode = versionProps.getProperty("VERSION_CODE", "1").toInt()
 val isReleaseBuild = gradle.startParameter.taskNames.any { it.contains("Release") }
+// GitHub Actions sätter CI=true automatiskt. Release-workflowet (.github/workflows/release.yml)
+// höjer och committar version.properties själv INNAN gradlew körs där, så denna auto-höjning
+// måste stå över i CI — annars dubbelhöjs versionen (en gång av workflowet, en gång här).
+val isCI = System.getenv("CI") == "true"
 
-val appVersionCode = if (isReleaseBuild) storedVersionCode + 1 else storedVersionCode
-val appVersionName = if (isReleaseBuild) "1.$appVersionCode" else versionProps.getProperty("VERSION_NAME", "1.0")
+val appVersionCode = if (isReleaseBuild && !isCI) storedVersionCode + 1 else storedVersionCode
+val appVersionName = if (isReleaseBuild && !isCI) "1.$appVersionCode" else versionProps.getProperty("VERSION_NAME", "1.0")
 
-if (isReleaseBuild) {
+if (isReleaseBuild && !isCI) {
     // Skriver rått istället för Properties.store(), som annars alltid
     // lägger till en tidsstämpel-kommentarsrad högst upp i filen.
     versionPropsFile.writeText("VERSION_CODE=$appVersionCode\nVERSION_NAME=$appVersionName\n")

@@ -78,15 +78,46 @@ Kodet i Fas 3 (statusändring, redigering), Fas 4 (källhantering), Fas 5 (filte
 - **Installation på telefon:** överför `app-release.apk` (Google Drive/e-post/USB), öppna filen och tillåt "installera okända appar" för den app som öppnar den.
 - **Automatisk versionshöjning:** `versionCode`/`versionName` höjs numera automatiskt av `app/build.gradle.kts` vid `assembleRelease` — ingen manuell redigering i `build.gradle.kts` behövs längre. Enda källan till sanning är `version.properties` i projektroten (`VERSION_CODE=`/`VERSION_NAME=`, committas till git, till skillnad från `gradle.properties`). Build-scriptet läser filen vid varje Gradle-körning; bara om något av de begärda tasknamnen innehåller "Release" (dvs. `assembleRelease`, men även `bundleRelease`/`lintRelease` osv.) höjs `VERSION_CODE` med +1 och skrivs tillbaka, med `VERSION_NAME` satt till `"1.$VERSION_CODE"`. `assembleDebug` läser bara det aktuella värdet, höjer aldrig. Vill man se det nya versionsnumret utan att gissa: `cat version.properties` efter en `assembleRelease`-körning.
 
-## Så här uppdaterar du appen
-Sedan Fas 9 (auto-update) sköter appen själv nedladdning/installationsprompt på redan installerade telefoner — det enda manuella steget är att BYGGA och PUBLICERA den nya versionen:
-1. Bygg om: `./gradlew assembleRelease` — höjer automatiskt `VERSION_CODE`/`VERSION_NAME` i `version.properties` (se "Release build" ovan, "Automatisk versionshöjning") och signerar med samma keystore automatiskt via `gradle.properties`. Inget manuellt versionsnummer att fylla i längre.
-2. Läs av det nya versionsnumret: `cat version.properties` (eller öppna filen).
-3. Publicera i `mould-king-tracker`-projektet: `python publish-update.py --apk C:\Brickradarapp\app\build\outputs\apk\release\app-release.apk --code <VERSION_CODE från steg 2> --name "<VERSION_NAME från steg 2>" --notes "<vad som ändrats>"` (se det projektets CLAUDE.md, "App-uppdatering", för vad skriptet gör).
-4. Nästa gång appen startar på en telefon som redan har en äldre version installerad, OCH den telefonen är på samma hemma-WiFi som servern, dyker uppdateringsdialogen upp automatiskt (se Fas 9-avsnittet ovan) — trycker användaren "Uppdatera" sköter appen resten (nedladdning + installationsprompt).
+## Så här uppdaterar du appen (GitHub-integration, sedan 2026-07-28)
+Release-processen är nu automatiserad end-to-end via GitHub Actions — se
+`brickradar-github-integration.md` för hela kickoff-specen och
+`mould-king-tracker`-projektets CLAUDE.md, avsnittet "App-uppdatering (Android
+auto-update)" och "GitHub-releaser (Del D)", för serverhalvan.
 
-**Förstagångsinstallation** (ingen tidigare version installerad än, så auto-update-flödet har ingen befintlig app att jämföra mot) görs fortfarande manuellt: överför `app-release.apk` (Drive/e-post/USB) och öppna filen på telefonen.
+1. **Committa och pusha till `main`** som vanligt (`git push origin main`).
+   Det är det ENDA manuella steget — ingen lokal `./gradlew assembleRelease`,
+   inget `publish-update.py`-anrop.
+2. `.github/workflows/release.yml` triggas av pushen och gör resten
+   automatiskt: höjer `VERSION_CODE`/`VERSION_NAME` i `version.properties`,
+   bygger en signerad release-APK (keystore/lösenord från repots Actions
+   Secrets, se Del A i kickoff-specen), committar tillbaka den höjda
+   `version.properties` till `main` (med `[skip ci]` så det inte triggar en
+   ny körning), och skapar en GitHub Release taggad `v<versionName>` med
+   APK:n som asset och senaste (den riktiga, triggande) commit-meddelandet
+   som release notes.
+3. `app/build.gradle.kts`s lokala auto-höjningslogik (se "Release build" ovan)
+   hoppar nu över sig själv när `CI=true` (satt automatiskt av Actions) — den
+   höjer/skriver alltså bara `version.properties` vid en LOKAL
+   `assembleRelease`, aldrig i CI, så versionen dubbelhöjs inte.
+4. Servern (`mould-king-tracker`) hämtar senaste release direkt från GitHub
+   API:et (`GET /api/app-version`, se det projektets CLAUDE.md) — ingen manuell
+   publiceringshandling där längre. Nästa gång appen startar på en telefon som
+   redan har en äldre version installerad, och den telefonen är på samma
+   hemma-WiFi som servern, dyker uppdateringsdialogen upp automatiskt (Fas 9).
+
+**Förstagångsinstallation** (ingen tidigare version installerad än) görs
+fortfarande manuellt: ladda ner APK:n från GitHub-releasens assets (eller
+`/static/downloads/brickradar-latest.apk` på servern efter första hämtningen)
+och öppna filen på telefonen.
+
+**`publish-update.py` (i `mould-king-tracker`) är MEDVETET behållen, inte
+borttagen** — som en manuell nödlösning om GitHub Actions eller GitHub API:et
+skulle vara nere/onåbart. Den är inte längre del av det normala flödet ovan.
 
 **Viktigt:**
-- `versionCode` höjs numera automatiskt av `assembleRelease` (steg 1) — matchar steg 3:s `--code` alltid EFTERSOM värdet läses från `version.properties` efter bygget, inte fylls i manuellt. Skriv aldrig in ett eget versionsnummer i `publish-update.py`-anropet.
-- Signeras APK:n med FEL keystore vägrar Android uppdatera och kräver avinstallation först (all lokal appdata förloras då) — därför måste alltid samma keystore-fil (`C:\Keys\brickradar-release.jks`) återanvändas, aldrig en nygenererad. Detta gäller oavsett om installationen triggas av auto-update-flödet eller görs manuellt.
+- Signeras APK:n med FEL keystore vägrar Android uppdatera och kräver
+  avinstallation först (all lokal appdata förloras då) — därför måste alltid
+  samma keystore-fil (`C:\Keys\brickradar-release.jks`, base64-kodad i Actions-
+  secreten `KEYSTORE_BASE64`) återanvändas, aldrig en nygenererad.
+- En push till `main` triggar workflowet oavsett vilken fil som ändrades (ingen
+  path-filtrering) — precis som kickoff-specen (Del C) anger.
