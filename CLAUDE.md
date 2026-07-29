@@ -91,6 +91,17 @@ Handoff-dokument bifogat till issuen (`design_handoff_grid_list_fix/README.md`) 
 - `Brush`-importet (bara använt av `ModelListCard`s gradient-scrim) togs bort som en följdstädning eftersom inget annat i filen längre använder det.
 - Byggverifiering: `./gradlew assembleDebug` — grön build. **Ingen emulator/fysisk enhet-körning denna session** — samma begränsning som tidigare Fas-jobb, se "Ej verifierat mot fysisk enhet" nedan.
 
+## Fas 14 — Listvy: bred layout med egen kategori/status-kolumn (design t13a, issue #10, 2026-07-29)
+
+Fas 13 (ovan) täckte designdokumentets rond t13 bara delvis: `ModelListRow` som byggdes då matchar 13b (telefon, 390×844) — en enda mittenkolumn med namn/modellnummer/status klumpat ihop. Rond t13 har dock en andra variant, **13a** (surfplatta/desktop, 1400×900), som bryter ut kategori/status i en EGEN kolumn skild från namnet, med en rubrikrad ("Modell" / "Kategori / status" / "Pris") — den var inte implementerad förrän nu.
+
+- `ModelListRow` är nu en `BoxWithConstraints` som väljer mellan två innehålls-composables efter samma `maxWidth >= 600.dp`-tröskel som `ModelDetailScreen.kt`s tvåspalts-läge (Fas 12): `CompactModelListRowContent` (oförändrad Fas 13-layout, telefon) eller den nya `WideModelListRowContent` (13a: 64dp-bild, "Modell"-kolumn (namn + modellnummer/bitar), egen "Kategori/status"-kolumn, pris-kolumn, `›`-pil — kolumnvikter 2.3f/1.3f/1f speglar mockupens `2.3fr 1.3fr 1fr`-rutnät).
+- Kategorietiketten slås upp via en ny `categoryLabel(category, categories)`-hjälpfunktion mot samma `categories: List<Category>` som redan hämtas i `ModelListScreen` (`GET /api/categories`, användes tidigare bara av `FilterBar`) — tråddad genom `ModelList` → `ModelListRow`. `UNCATEGORIZED_KEY` ("ovrigt", samma konstant som `AddModelScreen`/`ModelDetailScreen` redan använder) är fallback för `model.category == null`.
+- Status-textens färg i den breda kolumnen (`contextNote(model)`) sätts till `PositiveGreen` när `priceTrend.isAllTimeLow == true` (matchar mockupens gröna "Lägsta pris någonsin" mot grå "Bevakar") — en färgregel som inte fanns i den smala varianten (där hela statusraden alltid var `TextMutedMore`), eftersom 13a:s mockup visar den distinktionen tydligt men 13b inte gör det lika uttalat.
+- Pris-kolumnen (belopp + billigaste källa) bröts ut till en delad `PriceColumn`-composable, återanvänd av båda bredd-lägena — ingen duplicerad prislogik.
+- Byggverifiering: `./gradlew assembleDebug` — grön build. **Verifierad live** på en ansluten emulator (`emulator-5554`, 2560×1600 @320dpi ≈ 1280dp bredd — triggar automatiskt den breda layouten): skärmdump bekräftar bild/Modell/Kategori-status/Pris i fyra tydliga kolumner, exakt som design t13a, mot en riktig lokal `mould-king-tracker`-server.
+- **Medvetet INTE gjort:** ingen fristående verifiering av den smala (13b/telefon-) layouten denna session (samma tablet-emulator användes, ingen telefon-formfaktor-AVD tillgänglig) — koden för det fallet är dock oförändrad sedan Fas 13, som redan verifierades (byggd grönt, om än utan emulator då).
+
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
 - Detaljvy: full modellinfo + alla källor/priser

@@ -67,6 +67,7 @@ import com.sivan.brickradar.model.Category
 import com.sivan.brickradar.model.Model
 import com.sivan.brickradar.model.Source
 import com.sivan.brickradar.model.StatsResponse
+import com.sivan.brickradar.model.UNCATEGORIZED_KEY
 import com.sivan.brickradar.ui.theme.AccentGold
 import com.sivan.brickradar.ui.theme.AppBackground
 import com.sivan.brickradar.ui.theme.CardBackground
@@ -166,7 +167,7 @@ fun ModelListScreen(
                     } else if (viewMode == ListViewMode.GRID) {
                         ModelGrid(models = state.models, onModelClick = onModelClick)
                     } else {
-                        ModelList(models = state.models, onModelClick = onModelClick)
+                        ModelList(models = state.models, categories = categories, onModelClick = onModelClick)
                     }
                 }
             }
@@ -341,14 +342,14 @@ private fun SortMenuButton(selectedSort: SortOption, onSortSelected: (SortOption
 }
 
 @Composable
-private fun ModelList(models: List<Model>, onModelClick: (Int) -> Unit) {
+private fun ModelList(models: List<Model>, categories: List<Category>, onModelClick: (Int) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(models, key = { it.id }) { model ->
-            ModelListRow(model = model, onClick = { onModelClick(model.id) })
+            ModelListRow(model = model, categories = categories, onClick = { onModelClick(model.id) })
         }
     }
 }
@@ -378,12 +379,19 @@ private fun ModelGrid(models: List<Model>, onModelClick: (Int) -> Unit) {
     }
 }
 
+// Design t13 (rond 13, Fas 13): 13b (telefon) hade redan en enda info-kolumn
+// (namn/modellnummer/status/pris klumpade i mitten) -- 13a (surfplatta/bred
+// skarm) breder istallet ut kategori/status i en EGEN kolumn, skild fran
+// namn-kolumnen. BoxWithConstraints + samma 600dp-troskel som
+// ModelDetailScreen.kt:s tvaspalts-lage vaxlar mellan de tva.
+private val WIDE_LIST_ROW_MIN_WIDTH = 600.dp
+
 @Composable
-private fun ModelListRow(model: Model, onClick: () -> Unit) {
+private fun ModelListRow(model: Model, categories: List<Category>, onClick: () -> Unit) {
     val hasPrice = model.bestKrPerPiece != null
     val highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan"
     val cheapest = cheapestSource(model.prices)
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
@@ -396,8 +404,18 @@ private fun ModelListRow(model: Model, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .alpha(if (hasPrice) 1f else 0.72f)
             .padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (maxWidth >= WIDE_LIST_ROW_MIN_WIDTH) {
+            WideModelListRowContent(model = model, categories = categories, hasPrice = hasPrice, cheapest = cheapest)
+        } else {
+            CompactModelListRowContent(model = model, hasPrice = hasPrice, cheapest = cheapest)
+        }
+    }
+}
+
+@Composable
+private fun CompactModelListRowContent(model: Model, hasPrice: Boolean, cheapest: Source?) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(10.dp))) {
             if (model.imageUrl != null) {
                 AsyncImage(
@@ -434,22 +452,95 @@ private fun ModelListRow(model: Model, onClick: () -> Unit) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
-                style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
-                color = if (hasPrice) AccentGold else TextMutedMost,
-            )
-            if (cheapest != null) {
-                Text(
-                    text = "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                    color = if (highlighted) PositiveGreen else TextMutedMore,
-                )
-            }
-        }
+        PriceColumn(model = model, hasPrice = hasPrice, cheapest = cheapest, highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan")
         Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 6.dp))
     }
+}
+
+// Design t13a: bild, "Modell" (namn+modellnummer/bitar) och "Kategori / status"
+// far varsin kolumn -- till skillnad fran den smala varianten klumpas
+// status-notisen inte langre ihop med namnet, den star under kategorietiketten.
+@Composable
+private fun WideModelListRowContent(model: Model, categories: List<Category>, hasPrice: Boolean, cheapest: Source?) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(64.dp).clip(RoundedCornerShape(10.dp))) {
+            if (model.imageUrl != null) {
+                AsyncImage(
+                    model = model.imageUrl,
+                    contentDescription = model.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(ImagePlaceholder))
+            }
+        }
+        Column(modifier = Modifier.weight(2.3f).padding(horizontal = 16.dp)) {
+            Text(
+                text = model.name ?: model.modelNumber,
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = listOfNotNull(model.modelNumber.ifBlank { null }, model.pieceCount?.let { "$it bitar" })
+                    .joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                color = TextMutedMore,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1.3f).padding(horizontal = 16.dp)) {
+            Text(
+                text = categoryLabel(model.category, categories),
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = contextNote(model),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (model.priceTrend?.isAllTimeLow == true) PositiveGreen else TextMutedMore,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+        }
+        PriceColumn(
+            modifier = Modifier.weight(1f),
+            model = model,
+            hasPrice = hasPrice,
+            cheapest = cheapest,
+            highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan",
+        )
+        Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 12.dp))
+    }
+}
+
+@Composable
+private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, highlighted: Boolean, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.End) {
+        Text(
+            text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
+            style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
+            color = if (hasPrice) AccentGold else TextMutedMost,
+        )
+        if (cheapest != null) {
+            Text(
+                text = "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                color = if (highlighted) PositiveGreen else TextMutedMore,
+            )
+        }
+    }
+}
+
+private fun categoryLabel(category: String?, categories: List<Category>): String {
+    val key = category ?: UNCATEGORIZED_KEY
+    return categories.firstOrNull { it.category == key }?.label
+        ?: key.replaceFirstChar { it.uppercase() }
 }
 
 @Composable
