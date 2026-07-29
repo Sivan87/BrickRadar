@@ -86,6 +86,7 @@ import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
 import com.sivan.brickradar.ui.theme.TextPrimary
 import com.sivan.brickradar.ui.theme.TextSecondary
+import com.sivan.brickradar.util.colorForValueRating
 import com.sivan.brickradar.viewmodel.ListViewMode
 import com.sivan.brickradar.viewmodel.ModelListFilters
 import com.sivan.brickradar.viewmodel.ModelListUiState
@@ -352,10 +353,17 @@ private fun ModelList(models: List<Model>, onModelClick: (Int) -> Unit) {
     }
 }
 
+// Fas 12 (design t11b/t11d) -- auto-fill istället for ett fast 2-kolumners
+// rutnat, sa samma skarm som visar 2 kolumner pa en vanlig telefon vaxer
+// till fler kolumner nar bredden okar (Galaxy Z Fold uppfalld ~838dp, surfplatta
+// ~1194dp) -- helt automatiskt via GridCells.Adaptive, ingen egen
+// bredd-brytpunktslogik eller foldable-specifik detektering behovs for detta.
+private val GRID_CARD_MIN_WIDTH = 160.dp
+
 @Composable
 private fun ModelGrid(models: List<Model>, onModelClick: (Int) -> Unit) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+        columns = GridCells.Adaptive(minSize = GRID_CARD_MIN_WIDTH),
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -412,15 +420,30 @@ private fun ModelListCard(model: Model, onClick: () -> Unit) {
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted,
                     )
-                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = hasPrice.let { if (it) "%.2f kr".format(model.bestKrPerPiece) else "— kr" },
-                            style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
-                            color = if (hasPrice) AccentGold else TextMutedMost,
-                        )
-                        DeltaPill(model.priceTrend?.pct)
-                    }
+                    Text(
+                        text = hasPrice.let { if (it) "%.2f kr".format(model.bestKrPerPiece) else "— kr" },
+                        style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
+                        color = if (hasPrice) AccentGold else TextMutedMost,
+                    )
                 }
+            }
+            // Fas 12 (audit av t1-t10, rond 7a/10a) -- trendbadgen ligger som en
+            // egen pill uppe till vanster over bilden, INTE inline bredvid priset
+            // i scrimmet (dit den tidigare felaktigt hade hamnat) -- och en
+            // fardton-remsa langst ner pa bilden (colorForValueRating, samma
+            // trosklar som resten av appen) speglar mockupens genomgaende
+            // kort-anatomi.
+            model.priceTrend?.pct?.let { pct ->
+                TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopStart).padding(12.dp))
+            }
+            if (hasPrice) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(colorForValueRating(model.bestValueRating ?: "red")),
+                )
             }
         }
         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
@@ -478,6 +501,11 @@ private fun ModelListCard(model: Model, onClick: () -> Unit) {
 private fun ModelGridCard(model: Model, onClick: () -> Unit) {
     val hasPrice = model.bestKrPerPiece != null
     val highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan"
+    // Fas 12 (audit av t1-t10, rond 10b) -- rutkortets botten-rad visar
+    // billigaste kallans pris+namn ("399 kr · YWOBB"), inte market -- market
+    // visas redan pa listkortet (meta-raden) sa det ar ingen forlorad info,
+    // bara ratt falt pa ratt kort.
+    val cheapest = cheapestSource(model.prices)
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
@@ -488,14 +516,12 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
                 shape = RoundedCornerShape(16.dp),
             )
             .clickable(onClick = onClick)
-            .alpha(if (hasPrice) 1f else 0.72f)
-            .padding(10.dp),
+            .alpha(if (hasPrice) 1f else 0.72f),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(1.4f)
-                .clip(RoundedCornerShape(10.dp)),
+                .aspectRatio(1.4f),
         ) {
             if (model.imageUrl != null) {
                 AsyncImage(
@@ -507,44 +533,71 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(ImagePlaceholder))
             }
+            model.priceTrend?.pct?.let { pct ->
+                TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
+            }
+            if (hasPrice) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(colorForValueRating(model.bestValueRating ?: "red")),
+                )
+            }
         }
-        Text(
-            text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
-            style = MaterialTheme.typography.titleLarge.copy(fontFamily = MonoFont),
-            color = if (hasPrice) AccentGold else TextMutedMost,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-        Text(
-            text = model.name ?: model.modelNumber,
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        model.brand?.let {
+        Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = it,
+                text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
+                style = MaterialTheme.typography.titleLarge.copy(fontFamily = MonoFont),
+                color = if (hasPrice) AccentGold else TextMutedMost,
+            )
+            Text(
+                text = "PER BIT",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMutedMore,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
+                text = model.name ?: model.modelNumber,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                text = if (cheapest != null) {
+                    "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source)
+                } else {
+                    "Inga priser hittade · söker"
+                },
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
                 color = TextMutedMore,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
     }
 }
 
+// Fas 12 -- ersatter tidigare DeltaPill, som lag inline i prisscrimmet.
+// Design (rond 7a/10a/10b) visar trenden som en egen halvgenomskinlig pill
+// uppe till vanster over kortbilden, aldrig bredvid sjalva priset.
 @Composable
-private fun DeltaPill(pct: Double?) {
-    if (pct == null) return
+private fun TrendBadge(pct: Double, modifier: Modifier = Modifier) {
     val (color, arrow) = when {
         pct < -0.5 -> PositiveGreen to "▼"
         pct > 0.5 -> NegativeRed to "▲"
         else -> TextMuted to "±"
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(20.dp))
-            .border(width = 1.dp, color = color, shape = RoundedCornerShape(20.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .background(ScreenBackground.copy(alpha = 0.78f))
+            .border(width = 1.dp, color = color.copy(alpha = 0.5f), shape = RoundedCornerShape(20.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(
             text = "$arrow ${"%.0f".format(kotlin.math.abs(pct))} %",

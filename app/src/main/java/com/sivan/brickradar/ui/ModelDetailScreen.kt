@@ -271,26 +271,66 @@ private fun ModelDetail(
     onDeleteModelClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(modifier = Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
-            item {
-                HeroSection(model = model)
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    StatusChipsRow(currentStatus = model.status, isUpdating = isUpdatingStatus, onStatusSelected = onStatusSelected)
-                    ValueScaleSection(model = model, stats = stats)
-                    SourcesSection(
-                        model = model,
-                        deletingSourceId = deletingSourceId,
-                        onEdit = onEditSourceClick,
-                        onDeleteRequest = onDeleteSourceClick,
-                    )
-                    PriceHistorySection()
-                    ToolsSection(onAddSourceClick = onAddSourceClick)
-                    FactsSection(model = model, categories = categories)
+        // Fas 12 (design t11c) -- pa breda skarmar (Galaxy Z Fold uppfalld,
+        // surfplatta) delas innehallet i tva spalter sida vid sida istallet
+        // for att staplas i en enda kolumn: kallor/varde/prishistorik till
+        // vanster, verktyg/fakta i en smalare spalt till hoger -- samma
+        // brytpunkt (600dp, Material's egen compact/medium-grans) som resten
+        // av foldable-stodet i ModelListScreen.kt anvander implicit via
+        // GridCells.Adaptive. BottomActionBar forblir en fullbredd rad under
+        // bada layouterna, matchar designens egen 11c-footer.
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val isWide = maxWidth >= 600.dp
+            LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp)) {
+                item {
+                    HeroSection(model = model)
+                    if (isWide) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1.5f)) {
+                                StatusChipsRow(currentStatus = model.status, isUpdating = isUpdatingStatus, onStatusSelected = onStatusSelected)
+                                ValueScaleSection(model = model, stats = stats)
+                                SourcesSection(
+                                    model = model,
+                                    deletingSourceId = deletingSourceId,
+                                    onEdit = onEditSourceClick,
+                                    onDeleteRequest = onDeleteSourceClick,
+                                )
+                                PriceHistorySection()
+                            }
+                            Column(modifier = Modifier.width(260.dp)) {
+                                ToolsSection(onAddSourceClick = onAddSourceClick)
+                                FactsSection(model = model, categories = categories)
+                                if (model.status == "new") {
+                                    DeleteModelRow(onClick = onDeleteModelClick)
+                                }
+                            }
+                        }
+                    } else {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            StatusChipsRow(currentStatus = model.status, isUpdating = isUpdatingStatus, onStatusSelected = onStatusSelected)
+                            ValueScaleSection(model = model, stats = stats)
+                            SourcesSection(
+                                model = model,
+                                deletingSourceId = deletingSourceId,
+                                onEdit = onEditSourceClick,
+                                onDeleteRequest = onDeleteSourceClick,
+                            )
+                            PriceHistorySection()
+                            ToolsSection(onAddSourceClick = onAddSourceClick)
+                            FactsSection(model = model, categories = categories)
+                            if (model.status == "new") {
+                                DeleteModelRow(onClick = onDeleteModelClick)
+                            }
+                        }
+                    }
                 }
             }
         }
         if (model.status == "new") {
-            BottomActionBar(onMoveToWatching = onMoveToWatching, onReject = onReject, onDelete = onDeleteModelClick)
+            BottomActionBar(onMoveToWatching = onMoveToWatching, onReject = onReject)
         }
     }
 }
@@ -666,8 +706,12 @@ private fun FactRow(label: String, value: String) {
     }
 }
 
+// Fas 12 (audit av t1-t10, rond 9a/11c) -- den fasta fotraden ar EN
+// tva-knapps rad (Avsla + Flytta till bevakning), inte tre -- "Ta bort" bor
+// enligt mockupen i den skrollande ytan (se DeleteModelRow nedan), inte i den
+// fasta footern.
 @Composable
-private fun BottomActionBar(onMoveToWatching: () -> Unit, onReject: () -> Unit, onDelete: () -> Unit) {
+private fun BottomActionBar(onMoveToWatching: () -> Unit, onReject: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -679,22 +723,40 @@ private fun BottomActionBar(onMoveToWatching: () -> Unit, onReject: () -> Unit, 
     ) {
         Box(
             modifier = Modifier
+                .height(46.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .border(width = 1.dp, color = CardBorder, shape = RoundedCornerShape(16.dp))
+                .clickable(onClick = onReject)
+                .padding(horizontal = 22.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "Avslå", style = MaterialTheme.typography.titleSmall, color = TextMuted)
+        }
+        Box(
+            modifier = Modifier
                 .weight(1f)
-                .height(44.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .height(46.dp)
+                .clip(RoundedCornerShape(16.dp))
                 .background(PositiveGreen.copy(alpha = 0.08f))
-                .border(width = 1.dp, color = PositiveGreen.copy(alpha = 0.5f), shape = RoundedCornerShape(14.dp))
+                .border(width = 1.dp, color = PositiveGreen.copy(alpha = 0.5f), shape = RoundedCornerShape(16.dp))
                 .clickable(onClick = onMoveToWatching),
             contentAlignment = Alignment.Center,
         ) {
             Text(text = "Flytta till bevakning", style = MaterialTheme.typography.titleSmall, color = PositiveGreen)
         }
-        TextButton(onClick = onReject) {
-            Text(text = "Avslå", color = TextMuted)
-        }
-        TextButton(onClick = onDelete) {
-            Text(text = "Ta bort", color = NegativeRed)
-        }
+    }
+}
+
+@Composable
+private fun DeleteModelRow(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(44.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text = "Ta bort setet", style = MaterialTheme.typography.titleSmall, color = NegativeRed)
     }
 }
 

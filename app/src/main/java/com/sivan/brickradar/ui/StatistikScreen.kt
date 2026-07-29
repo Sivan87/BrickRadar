@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -50,6 +49,7 @@ import com.sivan.brickradar.ui.theme.AccentGold
 import com.sivan.brickradar.ui.theme.AppBackground
 import com.sivan.brickradar.ui.theme.CardBackground
 import com.sivan.brickradar.ui.theme.CardBorder
+import com.sivan.brickradar.ui.theme.CardBorderMuted
 import com.sivan.brickradar.ui.theme.MonoFont
 import com.sivan.brickradar.ui.theme.PanelBackground
 import com.sivan.brickradar.ui.theme.PositiveGreen
@@ -59,7 +59,7 @@ import com.sivan.brickradar.ui.theme.TextMuted
 import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
 import com.sivan.brickradar.ui.theme.TextPrimary
-import com.sivan.brickradar.ui.theme.ValueYellow
+import com.sivan.brickradar.ui.theme.TextSecondary
 import com.sivan.brickradar.util.colorForValueRating
 import com.sivan.brickradar.viewmodel.StatistikUiState
 import com.sivan.brickradar.viewmodel.StatistikViewModel
@@ -162,13 +162,17 @@ private fun StatistikContent(
     }
 }
 
+// Fas 12 (design t12) -- rubrikstilen speglar mockupens egen
+// (font:700 12.5px, ej versaler, ljusare farg #e7e3da) istallet for den
+// tidigare generiska versal-etikett-stilen (labelMedium/TextMutedMore), som
+// design t12 anvander konsekvent for alla fem underrubriker pa statistiksidan.
 @Composable
 private fun SectionTitle(text: String) {
     Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = TextMutedMore,
-        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+        text = text,
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+        color = TextSecondary,
+        modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
     )
 }
 
@@ -179,30 +183,41 @@ private fun EmptyNote(text: String) {
 
 private data class StatusBarItem(val label: String, val count: Int, val color: Color)
 
+// Fas 12 (design t12/12a) -- varje status ar tva rader (etikett+antal ovanpa
+// en fullbredds-bar) istallet for den tidigare enda raden (etikett | bar |
+// antal sida vid sida) -- matchar mockupens exakta struktur. "Sok"-fargen
+// bytt fran ValueYellow till AccentGold for att matcha designens #e8c93f
+// exakt (ValueYellow, #ffce45, ar en annan gul-nyans anvand for kr/del-
+// vardering pa annat hall i appen).
 @Composable
 private fun StatusDistribution(counts: StatusCounts, allCount: Int) {
     val items = listOf(
-        StatusBarItem("Sök", counts.new, ValueYellow),
+        StatusBarItem("Sök", counts.new, AccentGold),
         StatusBarItem("Bevakar", counts.watching, StatusWatchingBlue),
         StatusBarItem("Äger", counts.owned, PositiveGreen),
         StatusBarItem("Avslagen", counts.rejected, TextDim),
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
         items.forEach { item ->
             val pct = if (allCount > 0) item.count.toFloat() / allCount else 0f
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = item.label,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMutedMore,
-                    modifier = Modifier.width(72.dp),
-                )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(text = item.label, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    Text(
+                        text = item.count.toString(),
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                        color = TextMutedMore,
+                    )
+                }
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(AppBackground),
+                        .background(CardBorderMuted),
                 ) {
                     Box(
                         modifier = Modifier
@@ -212,12 +227,6 @@ private fun StatusDistribution(counts: StatusCounts, allCount: Int) {
                             .background(item.color),
                     )
                 }
-                Text(
-                    text = item.count.toString(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextMutedMost,
-                    modifier = Modifier.width(28.dp),
-                )
             }
         }
     }
@@ -299,9 +308,9 @@ private fun ValueDistributionRow(dist: ValueDistribution) {
             }
         }
         Text(
-            text = "(bland ${dist.total} bevakade med känt pris)",
+            text = "bland ${dist.total} bevakade med känt pris",
             style = MaterialTheme.typography.bodySmall,
-            color = TextMutedMost,
+            color = TextDim,
             modifier = Modifier.padding(top = 6.dp),
         )
     }

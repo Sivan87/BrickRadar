@@ -4,7 +4,13 @@ import androidx.compose.ui.graphics.Color
 
 // Palett från designdokumentet ("Klonradarn Design Options.dc.html", rond
 // t5-t11 där mörka hex-färger konvergerade — se CLAUDE.md/ui-redesign-anteckningar).
-val AppBackground = Color(0xFF0D0D0D)
+// AppBackground rattad (Fas 12, audit av t1-t10): #0d0d0d forekom bara i
+// t1:s redan overgivna "Amber Refined"-rond (segmented-control-chrome, inte
+// en skarmbakgrund) — VARJE konvergerad mockup t5-t10 anvander #0b0d0f som
+// verklig sidbakgrund, samma varde som ScreenBackground redan hade. Scaffold-
+// bakgrunden i alla fyra skarmar (ModelList/ModelDetail/AddModel/Statistik)
+// samt Theme.kt:s colorScheme.background laste tidigare fel varde.
+val AppBackground = Color(0xFF0B0D0F)
 val ScreenBackground = Color(0xFF0B0D0F)
 val CardBackground = Color(0xFF0E1113)
 val CardBackgroundAlt = Color(0xFF0C0F11)
