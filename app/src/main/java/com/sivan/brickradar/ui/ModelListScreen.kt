@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -54,7 +55,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -345,54 +345,60 @@ private fun ModelList(models: List<Model>, onModelClick: (Int) -> Unit) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(models, key = { it.id }) { model ->
-            ModelListCard(model = model, onClick = { onModelClick(model.id) })
+            ModelListRow(model = model, onClick = { onModelClick(model.id) })
         }
     }
 }
 
-// Fas 12 (design t11b/t11d) -- auto-fill istället for ett fast 2-kolumners
-// rutnat, sa samma skarm som visar 2 kolumner pa en vanlig telefon vaxer
-// till fler kolumner nar bredden okar (Galaxy Z Fold uppfalld ~838dp, surfplatta
-// ~1194dp) -- helt automatiskt via GridCells.Adaptive, ingen egen
-// bredd-brytpunktslogik eller foldable-specifik detektering behovs for detta.
+// Fas 12 (design t11b/t11d) hade auto-fill (GridCells.Adaptive) har, sa
+// kolumnantalet vaxte obegransat med bredden -- det strackte korten/bilderna
+// pa breda skarmar/surfplattor istallet for att bara visa fler fasta kolumner.
+// Ersatt (issue #10) med BoxWithConstraints + GridCells.Fixed nedan, samma
+// GRID_CARD_MIN_WIDTH men kolumnantalet klamras nu till max 4.
 private val GRID_CARD_MIN_WIDTH = 160.dp
 
 @Composable
 private fun ModelGrid(models: List<Model>, onModelClick: (Int) -> Unit) {
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = GRID_CARD_MIN_WIDTH),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(models, key = { it.id }) { model ->
-            ModelGridCard(model = model, onClick = { onModelClick(model.id) })
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val columns = (maxWidth / GRID_CARD_MIN_WIDTH).toInt().coerceIn(1, 4)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(models, key = { it.id }) { model ->
+                ModelGridCard(model = model, onClick = { onModelClick(model.id) })
+            }
         }
     }
 }
 
 @Composable
-private fun ModelListCard(model: Model, onClick: () -> Unit) {
+private fun ModelListRow(model: Model, onClick: () -> Unit) {
     val hasPrice = model.bestKrPerPiece != null
     val highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan"
-    Column(
+    val cheapest = cheapestSource(model.prices)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(if (highlighted) HighlightCardBackground else CardBackground)
             .border(
                 width = 1.dp,
                 color = if (highlighted) HighlightBorder else if (hasPrice) CardBorder else CardBorderMuted,
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(14.dp),
             )
             .clickable(onClick = onClick)
-            .alpha(if (hasPrice) 1f else 0.72f),
+            .alpha(if (hasPrice) 1f else 0.72f)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(modifier = Modifier.fillMaxWidth().height(172.dp)) {
+        Box(modifier = Modifier.size(60.dp).clip(RoundedCornerShape(10.dp))) {
             if (model.imageUrl != null) {
                 AsyncImage(
                     model = model.imageUrl,
@@ -403,52 +409,10 @@ private fun ModelListCard(model: Model, onClick: () -> Unit) {
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(ImagePlaceholder))
             }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, ScreenBackground.copy(alpha = 0.93f)),
-                        ),
-                    )
-                    .padding(top = 30.dp, start = 16.dp, end = 16.dp, bottom = 14.dp),
-            ) {
-                Column {
-                    Text(
-                        text = "VÄRDE / BIT",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted,
-                    )
-                    Text(
-                        text = hasPrice.let { if (it) "%.2f kr".format(model.bestKrPerPiece) else "— kr" },
-                        style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
-                        color = if (hasPrice) AccentGold else TextMutedMost,
-                    )
-                }
-            }
-            // Fas 12 (audit av t1-t10, rond 7a/10a) -- trendbadgen ligger som en
-            // egen pill uppe till vanster over bilden, INTE inline bredvid priset
-            // i scrimmet (dit den tidigare felaktigt hade hamnat) -- och en
-            // fardton-remsa langst ner pa bilden (colorForValueRating, samma
-            // trosklar som resten av appen) speglar mockupens genomgaende
-            // kort-anatomi.
-            model.priceTrend?.pct?.let { pct ->
-                TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopStart).padding(12.dp))
-            }
-            if (hasPrice) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(colorForValueRating(model.bestValueRating ?: "red")),
-                )
-            }
         }
-        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+        Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(
-                text = listOfNotNull(model.modelNumber.ifBlank { null }, model.releaseYear?.toString(), model.pieceCount?.let { "$it bitar" })
+                text = listOfNotNull(model.modelNumber.ifBlank { null }, model.pieceCount?.let { "$it bitar" })
                     .joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
                 color = TextMutedMore,
@@ -459,41 +423,32 @@ private fun ModelListCard(model: Model, onClick: () -> Unit) {
                 color = TextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = 2.dp),
             )
             Text(
                 text = contextNote(model),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = TextMutedMore,
-                modifier = Modifier.padding(top = 3.dp),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
-        cheapestSource(model.prices)?.let { source ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(PanelBackground)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "BILLIGAST AV ${model.prices.size}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMutedMost,
-                    )
-                    Text(text = source.source, style = MaterialTheme.typography.titleSmall, color = TextSecondary)
-                }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
+                color = if (hasPrice) AccentGold else TextMutedMost,
+            )
+            if (cheapest != null) {
                 Text(
-                    text = "%.0f kr".format(source.totalPriceSek ?: source.price ?: 0.0),
-                    style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
-                    color = if (highlighted) PositiveGreen else TextSecondary,
+                    text = "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                    color = if (highlighted) PositiveGreen else TextMutedMore,
                 )
-                Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 8.dp))
             }
         }
+        Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 6.dp))
     }
 }
 
