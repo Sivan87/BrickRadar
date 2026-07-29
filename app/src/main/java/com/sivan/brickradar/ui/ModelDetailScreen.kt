@@ -411,9 +411,20 @@ private fun SectionLabel(text: String) {
 // modellen" — samma set kunde visuellt hamna i en annan färgzon beroende på
 // vad Klonsnitt/LEGO-snitt just då var, trots att kr/del-chippen på källrader/
 // listkort redan alltid färgas efter samma fasta trösklar). Domänen (0 till
-// maxV) skalas för att rymma både de faktiska värdena OCH hela den tillämpliga
-// stegen, så bandgränserna alltid representerar de RIKTIGA tröskelvärdena i
-// kr/del, inte en godtycklig andel av bredden.
+// SCALE_BAR_MAX_KR, se nedan) är ett FAST spann, så bandgränserna alltid
+// representerar de RIKTIGA tröskelvärdena i kr/del, inte en andel av bredden
+// som råkar bero på vilka tre värden som visas just nu.
+// Skalans max är ett FAST tal (SCALE_BAR_MAX_KR), inte beräknat från
+// thisValue/cloneAvg/legoAvg (issue #7/#8: när maxV räknades ut dynamiskt
+// från de tre värdena (values.max() * 1.15) flyttade sig ALLA tre markörer —
+// inklusive Klonsnitt/LEGO-snitt, som är globala snitt och borde ligga still
+// oavsett vilken modell som visas — varje gång "Detta set" ändrades. Ett lågt
+// thisValue kunde ändå hamna långt in på baren eftersom skalan gick
+// 0→(högsta av de tre), inte 0→ett stabilt referensspann). Samma fasta värde
+// som webbversionen (static/app.js: SCALE_BAR_MAX_KR), valt med marginal över
+// LEGO:s högsta namngivna tröskel (1.30 kr/del, se ValueRating.kt).
+private const val SCALE_BAR_MAX_KR = 1.5
+
 @Composable
 private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
     val thisValue = model.bestKrPerPiece ?: return
@@ -421,8 +432,7 @@ private fun ValueScaleSection(model: Model, stats: StatsResponse?) {
     val legoAvg = stats?.avgKrPerPieceLegoAll
     val isOfficial = model.isOfficialSet
     val levels = valueLevelsFor(isOfficial)
-    val values = listOfNotNull(thisValue, cloneAvg, legoAvg)
-    val maxV = maxOf(values.max() * 1.15, levels.last().first * 1.15)
+    val maxV = SCALE_BAR_MAX_KR
 
     fun position(value: Double): Float = (value / maxV).coerceIn(0.0, 1.0).toFloat()
 
