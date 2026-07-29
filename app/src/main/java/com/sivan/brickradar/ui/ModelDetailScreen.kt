@@ -527,6 +527,7 @@ private fun SourcesSection(
         model.prices.forEach { source ->
             SourceRow(
                 source = source,
+                isOfficial = model.isOfficialSet,
                 highlighted = source.id == cheapestId,
                 isDeleting = deletingSourceId == source.id,
                 onEdit = { onEdit(source) },
@@ -539,6 +540,7 @@ private fun SourcesSection(
 @Composable
 private fun SourceRow(
     source: Source,
+    isOfficial: Boolean,
     highlighted: Boolean,
     isDeleting: Boolean,
     onEdit: () -> Unit,
@@ -576,20 +578,23 @@ private fun SourceRow(
                 modifier = Modifier.padding(top = 3.dp),
             )
         }
-        Text(
-            text = source.totalPriceSek?.let { "%.2f kr".format(it) }
-                ?: "${source.price?.let { "%.2f".format(it) } ?: "-"} ${source.currency.orEmpty()}".trim(),
-            style = MaterialTheme.typography.titleSmall.copy(fontFamily = MonoFont),
-            color = if (highlighted) AccentGold else TextSecondary,
-            modifier = Modifier.padding(end = 10.dp),
-        )
-        source.krPerPiece?.let {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 10.dp)) {
+            // Totalpriset är den primära siffran (vad man faktiskt betalar) — större/tyngre
+            // stil än kr/del nedanför, se issue #9 i Sivan87/BrickRadar.
             Text(
-                text = "%.2f".format(it),
-                style = MaterialTheme.typography.titleSmall.copy(fontFamily = MonoFont),
-                color = if (highlighted) AccentGold else TextMutedMore,
-                modifier = Modifier.padding(end = 6.dp),
+                text = source.totalPriceSek?.let { "%.2f kr".format(it) }
+                    ?: "${source.price?.let { "%.2f".format(it) } ?: "-"} ${source.currency.orEmpty()}".trim(),
+                style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
+                color = if (highlighted) AccentGold else TextPrimary,
             )
+            source.krPerPiece?.let {
+                Text(
+                    text = "%.2f kr/del".format(it),
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                    color = colorForValueRating(source.valueRating ?: classifyValue(it, isOfficial)),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
         if (isDeleting) {
             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentGold)
