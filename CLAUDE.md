@@ -7,7 +7,8 @@ Native Android-app (Kotlin/Compose) mot BrickRadar Flask-API:t (`C:\mould-king-t
 - De faktiska värdena kommer från `app/build.gradle.kts`s `buildConfigField(...)`, som i sin tur läser Gradle-properties `API_BASE_URL`/`API_KEY` via `project.findProperty(...)` — **exakt samma mönster som `RELEASE_STORE_PASSWORD` m.fl.** (se "Release build" nedan). Saknas någon av dem kastar Gradle-buildet ett tydligt fel istället för att tyst falla tillbaka på ett gammalt/hårdkodat värde.
   - **Lokalt:** lägg `API_BASE_URL=http\://<lan-ip>\:5000/` och `API_KEY=<nyckeln>` i root-projektets `gradle.properties` (gitignorad, samma fil som keystore-lösenorden — fylls i manuellt, skickas aldrig genom chatten). Kolonteckenet i URL:en behöver `\:`-escapas i properties-filsyntax.
   - **I CI** (`.github/workflows/release.yml`): skickas som `-PAPI_BASE_URL="${{ secrets.API_BASE_URL }}" -PAPI_KEY="${{ secrets.API_KEY }}"` till `assembleRelease`, satta som repo-secrets i Sivan87/BrickRadar (samma mönster som `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD` m.fl.).
-- Flyttar/byter servern IP: uppdatera `API_BASE_URL` i `gradle.properties` (lokalt) och/eller repo-secreten `API_BASE_URL` (CI) OCH IP-adressen i `app/src/main/res/xml/network_security_config.xml` (cleartext HTTP är annars blockerat av Android sedan API 28).
+- Flyttar/byter servern IP: uppdatera `API_BASE_URL` i `gradle.properties` (lokalt) och/eller repo-secreten `API_BASE_URL` (CI) OCH IP-adressen/domänen i `app/src/main/res/xml/network_security_config.xml` (cleartext HTTP är annars blockerat av Android sedan API 28).
+- **Sedan 2026-07-30 (issue #14) pekar `API_BASE_URL` mot Tailscale MagicDNS-adressen `http://tower.tail38b3cd.ts.net:5000/` istället för LAN-IP:t `192.168.1.30`** — se Fas 18 nedan.
 - Roterar API-nyckeln: uppdatera `API_KEY` i `mould-king-tracker/.env` OCH i `gradle.properties`/repo-secreten här samtidigt — de måste vara identiska, servern har bara EN giltig nyckel åt gången.
 
 ## Arkitektur (Fas 2 — grundskelett, utökad i Fas 3, Fas 4, Fas 6 och Fas 7)
@@ -138,6 +139,18 @@ Fas 16:s listvy-pill använde `statusStripeColor` (för att matcha prototypfilen
 - `ModelGridCard`s footer-kr/del använder redan `colorForValueRating` sedan Fas 15/16 — ingen ändring behövdes där, bara bekräftat korrekt.
 - `StatistikScreen.kt`s samtliga kr/del-visningar (bästa fynd, märkessnitt, kategori-snitt) använde redan `colorForValueRating` konsekvent — kontrollerat, inte i scope för användarens fråga (listvy/detaljvy/rutvy) men bekräftat redan korrekt.
 - Byggverifiering: `./gradlew assembleDebug` — grön build. **Verifierad live**: listvyns kr/del-pill visar nu samma cyanfärg oavsett om radens vänsterkant är guld (Sök) eller grön (Äger), och detaljvyns VÄRDE/BIT-siffra byter färg (cyan bekräftat på en modell med 0.29 kr/del) istället för att alltid vara guld.
+
+## Fas 18 — Backend-adress via Tailscale istället för LAN-IP (issue #14, 2026-07-30)
+
+Appen pratade tidigare med backend enbart via lokal IP (`192.168.1.30:5000`), vilket bara fungerade på hemma-WiFi. Unraid-servern är nu ansluten till Tailscale (mesh-VPN, tailnet `sivan.salarsson@outlook.com`), vilket gör backend nåbar utifrån utan portforwarding/publik exponering + domän (avsiktligt vald lösning för ett rent personligt-bruk-scenario).
+
+- Ingen källkodsändring behövdes — `API_BASE_URL` var redan externaliserad till `BuildConfig` sedan issue #2 (se "Serverkonfiguration" ovan), inte hårdkodad i `ApiConfig.kt`/`Constants.kt` som issuen antog. Tre konfigurationsställen uppdaterade istället:
+  - Lokal `gradle.properties`: `API_BASE_URL` → `http\://tower.tail38b3cd.ts.net\:5000/`.
+  - Repo-secreten `API_BASE_URL` i Sivan87/BrickRadar (CI): satt till `http://tower.tail38b3cd.ts.net:5000/` (ingen `\:`-escaping här — secreten skickas rakt av som `-P`-argument, inte genom properties-filsyntax, se `release.yml`).
+  - `app/src/main/res/xml/network_security_config.xml`: domänen bytt från `192.168.1.30` till `tower.tail38b3cd.ts.net` (annars blockerar Android cleartext HTTP mot den nya adressen).
+- **MagicDNS-namnet valdes uttryckligen framför den råa Tailscale-IP:n** (`100.113.110.120`) — IP:t kan teoretiskt ändras om enheten återautentiseras mot tailnetet, medan MagicDNS-namnet är stabilt.
+- Adressen är fortsatt hårdkodad (inget UI för att ändra den) — beslutat i issuen som enklaste lösningen, ändrar inte det tidigare avgränsningsbeslutet under "INTE implementerat än" (VPN-stöd/inställningsskärm för server-IP).
+- **Kräver Tailscale-appen installerad och inloggad på samma tailnet på telefonen** för att nå backend utanför hemma-WiFi — utan den ska appen visa ett tydligt felmeddelande (nätverksfel, samma `ApiResult.Error`-hantering som redan finns) istället för att krascha, inte nå backend alls med Tailscale avstängd.
 
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
