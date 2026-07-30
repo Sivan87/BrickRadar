@@ -39,6 +39,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -404,6 +406,13 @@ private fun statusStripeColor(status: String): Color = when (status) {
     else -> AccentGold
 }
 
+private fun statusLabel(status: String): String = when (status) {
+    "watching" -> "Bevakar"
+    "owned" -> "Äger"
+    "rejected" -> "Avslagen"
+    else -> "Sök"
+}
+
 @Composable
 private fun ModelListRow(model: Model, categories: List<Category>, onClick: () -> Unit) {
     val hasPrice = model.bestKrPerPiece != null
@@ -587,14 +596,25 @@ private fun categoryLabel(category: String?, categories: List<Category>): String
         ?: key.replaceFirstChar { it.uppercase() }
 }
 
+// Fas 16 (issue #12, uppfoljning): jamfort direkt mot BrickRadar Rutvy
+// (nuvarande).dc.html -- foljande strukturella element saknades helt i den
+// forra versionen av detta kort och ar tillagda har for att verkligen matcha
+// prototypen, inte bara prisfokus-bytet:
+// - Statuspill uppe till vanster OVER bilden (samma statusfarg som listradens
+//   vansterkant, se statusStripeColor/statusLabel).
+// - Totalpris ligger nu i en gradient-scrim OVANPA bilden (som prototypens
+//   .rv-media-overlay), fargad AccentGold (prototypens #ffce45) -- INTE under
+//   bilden i vitt som forra versionen gjorde.
+// - Marke (litet, guld, versaler) mellan bild och namn.
+// - Antal delar som egen rad.
+// - Kontextrad (contextNote, samma text/logik som redan anvands i listvyn).
+// - En riktig footer-rad ("Billigast av N" + kallnamn vanster, kr/del hogern,
+//   fargad efter value-rating) skild fran resten av kortet med en tunn linje,
+//   matchar prototypens .rv-footer exakt.
 @Composable
 private fun ModelGridCard(model: Model, onClick: () -> Unit) {
     val hasPrice = model.bestKrPerPiece != null
     val highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan"
-    // Fas 12 (audit av t1-t10, rond 10b) -- rutkortets botten-rad visar
-    // billigaste kallans pris+namn ("399 kr · YWOBB"), inte market -- market
-    // visas redan pa listkortet (meta-raden) sa det ar ingen forlorad info,
-    // bara ratt falt pa ratt kort.
     val cheapest = cheapestSource(model.prices)
     Column(
         modifier = Modifier
@@ -623,8 +643,43 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(ImagePlaceholder))
             }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(statusStripeColor(model.status))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    text = statusLabel(model.status).uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = AppBackground,
+                )
+            }
             model.priceTrend?.pct?.let { pct ->
-                TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopStart).padding(8.dp))
+                TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, ScreenBackground.copy(alpha = 0.92f))))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                Column {
+                    Text(
+                        text = "TOTALPRIS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                    )
+                    Text(
+                        text = if (cheapest != null) "%.0f kr".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0) else "— kr",
+                        style = MaterialTheme.typography.titleLarge.copy(fontFamily = MonoFont),
+                        color = if (cheapest != null) AccentGold else TextMutedMost,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
             if (hasPrice) {
                 Box(
@@ -638,40 +693,71 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = if (cheapest != null) "%.0f kr".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0) else "— kr",
-                style = MaterialTheme.typography.titleLarge.copy(fontFamily = MonoFont),
-                color = if (cheapest != null) TextPrimary else TextMutedMost,
-            )
-            Text(
-                text = "TOTALPRIS",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMutedMore,
-                modifier = Modifier.padding(top = 2.dp),
+                text = (model.brand ?: "Mould King").uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = AccentGold,
             )
             Text(
                 text = model.name ?: model.modelNumber,
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 3.dp),
+            )
+            model.pieceCount?.let {
+                Text(
+                    text = "$it delar",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                    color = TextMutedMore,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Text(
+                text = contextNote(model),
+                style = MaterialTheme.typography.bodySmall,
+                color = TextMutedMore,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = 6.dp),
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            HorizontalDivider(modifier = Modifier.padding(top = 10.dp), color = CardBorder)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (cheapest != null) {
+                    Column {
+                        Text(
+                            text = "Billigast av ${model.prices.size}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextMutedMore,
+                        )
+                        Text(
+                            text = cheapest.source,
+                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Inga priser hittade · söker",
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                        color = TextMutedMore,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (hasPrice) {
                     Text(
                         text = "%.2f kr/del".format(model.bestKrPerPiece),
-                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = MonoFont),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = MonoFont, fontWeight = FontWeight.Bold),
                         color = colorForValueRating(model.bestValueRating),
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
                 }
-                Text(
-                    text = cheapest?.source ?: "Inga priser hittade · söker",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                    color = TextMutedMore,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }

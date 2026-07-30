@@ -115,6 +115,20 @@ Issue #11/#12 beskrev en webb-redesign (`static/app.js`/`style.css` i `mould-kin
 - Byggverifiering: `./gradlew assembleDebug` — grön build efter båda rundorna. **Verifierad live** på en ansluten emulator (`emulator-5554`) mot en riktig lokal `mould-king-tracker`-server, båda rundorna: skärmdumpar bekräftar stort totalpris + liten färgad kr/del-chip, exakt 2 rutvy-kolumner (testat på denna breda tablet-emulator som tidigare fick 4 kolumner av Fas 13/14-logiken), och korrekt färgad statusstripe i listvyn.
 - **Bakgrund/korrigering:** samma redesign implementerades först (felaktigt, och till en början bara delvis) i webbappen (`mould-king-tracker`, commit `2e41ea2`) innan användaren klargjorde att issue #11/#12 var avsedda för Android — den webbcommiten reverterades (`c31478b`) samma dag.
 
+## Fas 16 — Rutvy/listvy verifierade rad-för-rad mot de faktiska prototypfilerna (uppföljning, 2026-07-30)
+
+Efter Fas 15 rapporterade användaren att listvyn "fortfarande såg ut som gamla designen" och pekade på de tre faktiska `.dc.html`-prototypfilerna (inte bara den tidigare läsningen av GitHub-issuen). En direkt fil-för-fil-jämförelse hittade riktiga strukturella avvikelser i BÅDA vyerna, inte bara en upplevd känsla:
+
+- **Listvy — `PriceColumn`s kr/del-element var färgad TEXT efter `colorForValueRating`, prototypen (`BrickRadar Listvy.dc.html`/`Listvy Options.dc.html`, radlayout 1b) visar en färgad PILL (bakgrund+rundade hörn+mörk text) i SAMMA statusfärg som vänsterkanten (`statusStripeColor`).** Rättat: kr/del är nu en `Box` med `background(statusStripeColor(model.status))` + `AppBackground`-färgad text, inte längre `colorForValueRating`. Detta är den konkreta orsaken till att raden inte kändes "ny" — accentfärgen band inte ihop kant och pris som en enhet.
+- **Rutvy — `ModelGridCard` saknade flera element som finns i `BrickRadar Rutvy (nuvarande).dc.html`:**
+  - Statuspill (SÖK/BEVAKAR/ÄGER, `statusStripeColor`-bakgrund) uppe till vänster ÖVER bilden — fanns inte alls tidigare (kortet hade ingen statusindikator överhuvudtaget).
+  - Totalpris låg tidigare UNDER bilden i vitt (`TextPrimary`) — flyttat till en gradient-scrim OVANPÅ bilden (`Brush.verticalGradient`), färgat `AccentGold` (prototypens `#ffce45`), med "TOTALPRIS"-etiketten kvar ovanför.
+  - Märke (`model.brand`, litet/guld/versaler), antal delar (`model.pieceCount` + "delar") och en kontextrad (återanvänder `contextNote(model)`, samma funktion som redan användes i listvyn) — inget av detta visades tidigare på rutkortet.
+  - Footer gjordes om till en riktig rad ("Billigast av `model.prices.size`" + källnamn vänster, kr/del `colorForValueRating`-färgad text höger), skild från resten av kortet med en `HorizontalDivider` — matchar `.rv-footer` istället för den tidigare enkla `Row` utan avskiljande linje.
+  - Trend-badgen (`TrendBadge`, ▼/▲/±) flyttades från topp-vänster till topp-höger för att göra plats åt den nya statuspillen — prototypens datamodell har ingen trend alls, så positioneringen är en pragmatisk anpassning, inte en direkt kopiering.
+- **Medvetet fortfarande INTE pixel-för-pixel:** exakta hex-färger (kortbakgrund `#1e1e1e`, m.m.) — appens egen etablerade färgpalett (Fas 8, "Klonradarn Design Options", en annan/separat designkälla) används fortsatt istället för webbens `#141414`-baserade palett. Det är den strukturella hierarkin/vilka element som finns som jämförts och rättats, inte de exakta hex-värdena.
+- Byggverifiering: `./gradlew assembleDebug` — grön build. **Verifierad live** på emulator (`emulator-5554`) mot en riktig lokal `mould-king-tracker`-server: skärmdumpar bekräftar statuspill+guld-totalpris-overlay+märke/delar/kontext/footer i rutvyn, och statusfärgad pill (inte bara text) i listvyn — jämfört sida vid sida mot de tre `.dc.html`-filerna användaren pekade på.
+
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
 - Detaljvy: full modellinfo + alla källor/priser
