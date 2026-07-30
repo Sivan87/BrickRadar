@@ -546,10 +546,15 @@ private fun WideModelListRowContent(model: Model, categories: List<Category>, ha
     }
 }
 
-// Totalpris ar det primara fokuset (stort), kr/del en liten sekundar chip
-// fargad efter value-rating -- tidigare var det tvartom (kr/del stort i
-// AccentGold, totalpris+kalla en liten rad), samma storleksbyte som webbens
-// motsvarande listvy/rutvy-issue (#11/#12 i Sivan87/BrickRadar).
+// Totalpris ar det primara fokuset (stort), kr/del en liten sekundar PILL --
+// tidigare var det tvartom (kr/del stort i AccentGold, totalpris+kalla en
+// liten rad). Pillen fargas efter STATUS (samma farg som radens vansterkant,
+// se statusStripeColor), inte value-rating -- verifierat mot de faktiska
+// prototypfilerna (BrickRadar Listvy.dc.html / Listvy Options.dc.html,
+// radlayout 1b) som bade anvander {{ it.statusColor }} for kr/bit-chippen,
+// samma farg som border-left. En tidigare version av denna fix fargade
+// pillen efter value-rating istallet, vilket inte matchade prototypen och
+// gjorde att chippen inte lästes som samma sammanhangande accent som kanten.
 @Composable
 private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.End) {
@@ -559,11 +564,19 @@ private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, modi
             color = if (cheapest != null) TextPrimary else TextMutedMost,
         )
         if (hasPrice) {
-            Text(
-                text = "%.2f kr/del".format(model.bestKrPerPiece),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                color = colorForValueRating(model.bestValueRating),
-            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(statusStripeColor(model.status))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "%.2f kr/del".format(model.bestKrPerPiece),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = MonoFont, fontWeight = FontWeight.Bold),
+                    color = AppBackground,
+                )
+            }
         }
     }
 }
