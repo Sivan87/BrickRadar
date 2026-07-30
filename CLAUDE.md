@@ -129,6 +129,16 @@ Efter Fas 15 rapporterade användaren att listvyn "fortfarande såg ut som gamla
 - **Medvetet fortfarande INTE pixel-för-pixel:** exakta hex-färger (kortbakgrund `#1e1e1e`, m.m.) — appens egen etablerade färgpalett (Fas 8, "Klonradarn Design Options", en annan/separat designkälla) används fortsatt istället för webbens `#141414`-baserade palett. Det är den strukturella hierarkin/vilka element som finns som jämförts och rättats, inte de exakta hex-värdena.
 - Byggverifiering: `./gradlew assembleDebug` — grön build. **Verifierad live** på emulator (`emulator-5554`) mot en riktig lokal `mould-king-tracker`-server: skärmdumpar bekräftar statuspill+guld-totalpris-overlay+märke/delar/kontext/footer i rutvyn, och statusfärgad pill (inte bara text) i listvyn — jämfört sida vid sida mot de tre `.dc.html`-filerna användaren pekade på.
 
+## Fas 17 — kr/del ska alltid färgas efter prisnivå, inte status (uppföljning, 2026-07-30)
+
+Fas 16:s listvy-pill använde `statusStripeColor` (för att matcha prototypfilens `{{ it.statusColor }}` på kr/bit-chippen). Användaren rättade uttryckligen: kr/del ska ALLTID visa prisnivå-färgen (cyan/grön/gul/orange/röd, samma `classifyValue`-trösklar som resten av appen, se `util/ValueRating.kt`) i alla tre vyer, inte statusfärgen — statuskopplingen i prototypfilen var alltså inte vad som skulle implementeras trots att den bokstavligen stod där.
+
+- `ModelListScreen.kt: PriceColumn` — pillens bakgrund bytt från `statusStripeColor(model.status)` till `colorForValueRating(model.bestValueRating)`. Vänsterkanten (`statusStripeColor` i `ModelListRow`) förblir statusfärgad — det var bara kr/del-elementet som var fel.
+- `ModelDetailScreen.kt` — den stora "VÄRDE / BIT"-hero-siffran (rad ~382) var hårdkodad till `AccentGold` oavsett faktiskt värde, den enda platsen i appen som INTE redan följde värdeskalan (källradernas egna kr/del-chips, rad ~632, använde redan `colorForValueRating` sedan tidigare och behövde ingen ändring). Bytt till `colorForValueRating(model.bestValueRating)`.
+- `ModelGridCard`s footer-kr/del använder redan `colorForValueRating` sedan Fas 15/16 — ingen ändring behövdes där, bara bekräftat korrekt.
+- `StatistikScreen.kt`s samtliga kr/del-visningar (bästa fynd, märkessnitt, kategori-snitt) använde redan `colorForValueRating` konsekvent — kontrollerat, inte i scope för användarens fråga (listvy/detaljvy/rutvy) men bekräftat redan korrekt.
+- Byggverifiering: `./gradlew assembleDebug` — grön build. **Verifierad live**: listvyns kr/del-pill visar nu samma cyanfärg oavsett om radens vänsterkant är guld (Sök) eller grön (Äger), och detaljvyns VÄRDE/BIT-siffra byter färg (cyan bekräftat på en modell med 0.29 kr/del) istället för att alltid vara guld.
+
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
 - Detaljvy: full modellinfo + alla källor/priser

@@ -555,15 +555,15 @@ private fun WideModelListRowContent(model: Model, categories: List<Category>, ha
     }
 }
 
-// Totalpris ar det primara fokuset (stort), kr/del en liten sekundar PILL --
-// tidigare var det tvartom (kr/del stort i AccentGold, totalpris+kalla en
-// liten rad). Pillen fargas efter STATUS (samma farg som radens vansterkant,
-// se statusStripeColor), inte value-rating -- verifierat mot de faktiska
-// prototypfilerna (BrickRadar Listvy.dc.html / Listvy Options.dc.html,
-// radlayout 1b) som bade anvander {{ it.statusColor }} for kr/bit-chippen,
-// samma farg som border-left. En tidigare version av denna fix fargade
-// pillen efter value-rating istallet, vilket inte matchade prototypen och
-// gjorde att chippen inte lästes som samma sammanhangande accent som kanten.
+// Totalpris ar det primara fokuset (stort), kr/del en liten sekundar PILL,
+// fargad efter VALUE-RATING (cyan/gron/gul/orange/rod, colorForValueRating)
+// -- ett explicit anvandarbeslut (2026-07-30): kr/del ska ALLTID visa
+// prisniva-fargen i listvyn/detaljvyn/rutvyn, inte statusfargen. En tidigare
+// version av denna pill anvande statusStripeColor (samma farg som radens
+// vansterkant) for att matcha {{ it.statusColor }} i prototypfilen
+// BrickRadar Listvy.dc.html -- men anvandaren rattade uttryckligen till att
+// kr/del-fargen ska foljas prisniva-skalan overallt, inte prototypens
+// statuskopplade pill. Vansterkanten (statusStripeColor) forblir statusfargad.
 @Composable
 private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.End) {
@@ -577,7 +577,7 @@ private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, modi
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(statusStripeColor(model.status))
+                    .background(colorForValueRating(model.bestValueRating))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(

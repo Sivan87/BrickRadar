@@ -381,7 +381,7 @@ private fun HeroSection(model: Model) {
             Text(
                 text = model.bestKrPerPiece?.let { "%.2f kr".format(it) } ?: "— kr",
                 style = MaterialTheme.typography.headlineSmall.copy(fontFamily = MonoFont),
-                color = if (model.bestKrPerPiece != null) AccentGold else TextMutedMost,
+                color = if (model.bestKrPerPiece != null) colorForValueRating(model.bestValueRating) else TextMutedMost,
             )
         }
     }
