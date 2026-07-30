@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -83,6 +85,8 @@ import com.sivan.brickradar.ui.theme.NegativeRed
 import com.sivan.brickradar.ui.theme.PanelBackground
 import com.sivan.brickradar.ui.theme.PositiveGreen
 import com.sivan.brickradar.ui.theme.ScreenBackground
+import com.sivan.brickradar.ui.theme.StatusWatchingBlue
+import com.sivan.brickradar.ui.theme.TextDim
 import com.sivan.brickradar.ui.theme.TextMuted
 import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
@@ -359,27 +363,22 @@ private fun ModelList(models: List<Model>, categories: List<Category>, onModelCl
     }
 }
 
-// Fas 12 (design t11b/t11d) hade auto-fill (GridCells.Adaptive) har, sa
-// kolumnantalet vaxte obegransat med bredden -- det strackte korten/bilderna
-// pa breda skarmar/surfplattor istallet for att bara visa fler fasta kolumner.
-// Ersatt (issue #10) med BoxWithConstraints + GridCells.Fixed nedan, samma
-// GRID_CARD_MIN_WIDTH men kolumnantalet klamras nu till max 4.
-private val GRID_CARD_MIN_WIDTH = 160.dp
-
+// Fas 15 (issue #12): rutvyn ar nu ALLTID max 2 kolumner per rad, samma
+// fasta grid-template-columns: repeat(2, 1fr) som webbens motsvarande fix --
+// ersatter Fas 12/13:s breddberoende GridCells.Fixed(1..4) (BoxWithConstraints
+// + GRID_CARD_MIN_WIDTH), som lat kolumnantalet vaxa pa surfplattor/breda
+// skarmar. Medvetet forenklat: ingen bredddetektering behovs langre.
 @Composable
 private fun ModelGrid(models: List<Model>, onModelClick: (Int) -> Unit) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val columns = (maxWidth / GRID_CARD_MIN_WIDTH).toInt().coerceIn(1, 4)
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(columns),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(models, key = { it.id }) { model ->
-                ModelGridCard(model = model, onClick = { onModelClick(model.id) })
-            }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(models, key = { it.id }) { model ->
+            ModelGridCard(model = model, onClick = { onModelClick(model.id) })
         }
     }
 }
@@ -390,6 +389,20 @@ private fun ModelGrid(models: List<Model>, onModelClick: (Int) -> Unit) {
 // namn-kolumnen. BoxWithConstraints + samma 600dp-troskel som
 // ModelDetailScreen.kt:s tvaspalts-lage vaxlar mellan de tva.
 private val WIDE_LIST_ROW_MIN_WIDTH = 600.dp
+
+// Fas 15 (issue #11): status visas nu som en fargad vansterkant pa raden --
+// samma statusfarger som redan etablerats i StatistikScreen.kt:s StatusDistribution
+// (Sok/AccentGold, Bevakar/StatusWatchingBlue, Ager/PositiveGreen, Avslagen/TextDim),
+// har atervanda for konsekvens istallet for nya farger. Ritas som en smal
+// fargad stripe langst till vanster i raden (Row+IntrinsicSize.Min sa stripen
+// stracker sig till radens fulla hojd), inte en badge -- Android-listraden har
+// aldrig haft nagon status-badge att ersatta, bara en ny indikator som saknades.
+private fun statusStripeColor(status: String): Color = when (status) {
+    "watching" -> StatusWatchingBlue
+    "owned" -> PositiveGreen
+    "rejected" -> TextDim
+    else -> AccentGold
+}
 
 @Composable
 private fun ModelListRow(model: Model, categories: List<Category>, onClick: () -> Unit) {
@@ -407,13 +420,23 @@ private fun ModelListRow(model: Model, categories: List<Category>, onClick: () -
                 shape = RoundedCornerShape(14.dp),
             )
             .clickable(onClick = onClick)
-            .alpha(if (hasPrice) 1f else 0.72f)
-            .padding(10.dp),
+            .alpha(if (hasPrice) 1f else 0.72f),
     ) {
-        if (maxWidth >= WIDE_LIST_ROW_MIN_WIDTH) {
-            WideModelListRowContent(model = model, categories = categories, hasPrice = hasPrice, cheapest = cheapest)
-        } else {
-            CompactModelListRowContent(model = model, hasPrice = hasPrice, cheapest = cheapest)
+        val isWide = maxWidth >= WIDE_LIST_ROW_MIN_WIDTH
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(4.dp)
+                    .background(statusStripeColor(model.status)),
+            )
+            Box(modifier = Modifier.weight(1f).padding(10.dp)) {
+                if (isWide) {
+                    WideModelListRowContent(model = model, categories = categories, hasPrice = hasPrice, cheapest = cheapest)
+                } else {
+                    CompactModelListRowContent(model = model, hasPrice = hasPrice, cheapest = cheapest)
+                }
+            }
         }
     }
 }
