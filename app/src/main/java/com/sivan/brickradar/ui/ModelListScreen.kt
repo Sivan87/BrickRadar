@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -184,7 +185,11 @@ private fun ListHeader(viewMode: ListViewMode, onViewModeChange: (ListViewMode) 
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = "BrickRadar", style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+        Text(
+            text = "BrickRadar",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold),
+            color = TextPrimary,
+        )
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(12.dp))
@@ -452,7 +457,7 @@ private fun CompactModelListRowContent(model: Model, hasPrice: Boolean, cheapest
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        PriceColumn(model = model, hasPrice = hasPrice, cheapest = cheapest, highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan")
+        PriceColumn(model = model, hasPrice = hasPrice, cheapest = cheapest)
         Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 6.dp))
     }
 }
@@ -513,25 +518,28 @@ private fun WideModelListRowContent(model: Model, categories: List<Category>, ha
             model = model,
             hasPrice = hasPrice,
             cheapest = cheapest,
-            highlighted = model.bestValueRating == "green" || model.bestValueRating == "cyan",
         )
         Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
+// Totalpris ar det primara fokuset (stort), kr/del en liten sekundar chip
+// fargad efter value-rating -- tidigare var det tvartom (kr/del stort i
+// AccentGold, totalpris+kalla en liten rad), samma storleksbyte som webbens
+// motsvarande listvy/rutvy-issue (#11/#12 i Sivan87/BrickRadar).
 @Composable
-private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, highlighted: Boolean, modifier: Modifier = Modifier) {
+private fun PriceColumn(model: Model, hasPrice: Boolean, cheapest: Source?, modifier: Modifier = Modifier) {
     Column(modifier = modifier, horizontalAlignment = Alignment.End) {
         Text(
-            text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
+            text = if (cheapest != null) "%.0f kr".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0) else "— kr",
             style = MaterialTheme.typography.titleMedium.copy(fontFamily = MonoFont),
-            color = if (hasPrice) AccentGold else TextMutedMost,
+            color = if (cheapest != null) TextPrimary else TextMutedMost,
         )
-        if (cheapest != null) {
+        if (hasPrice) {
             Text(
-                text = "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source),
+                text = "%.2f kr/del".format(model.bestKrPerPiece),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                color = if (highlighted) PositiveGreen else TextMutedMore,
+                color = colorForValueRating(model.bestValueRating),
             )
         }
     }
@@ -594,12 +602,12 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
         }
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = if (hasPrice) "%.2f kr".format(model.bestKrPerPiece) else "— kr",
+                text = if (cheapest != null) "%.0f kr".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0) else "— kr",
                 style = MaterialTheme.typography.titleLarge.copy(fontFamily = MonoFont),
-                color = if (hasPrice) AccentGold else TextMutedMost,
+                color = if (cheapest != null) TextPrimary else TextMutedMost,
             )
             Text(
-                text = "PER BIT",
+                text = "TOTALPRIS",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextMutedMore,
                 modifier = Modifier.padding(top = 2.dp),
@@ -612,18 +620,23 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            Text(
-                text = if (cheapest != null) {
-                    "%.0f kr · %s".format(cheapest.totalPriceSek ?: cheapest.price ?: 0.0, cheapest.source)
-                } else {
-                    "Inga priser hittade · söker"
-                },
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
-                color = TextMutedMore,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                if (hasPrice) {
+                    Text(
+                        text = "%.2f kr/del".format(model.bestKrPerPiece),
+                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = MonoFont),
+                        color = colorForValueRating(model.bestValueRating),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                }
+                Text(
+                    text = cheapest?.source ?: "Inga priser hittade · söker",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                    color = TextMutedMore,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
