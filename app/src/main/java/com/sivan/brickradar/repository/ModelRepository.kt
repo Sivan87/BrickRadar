@@ -1,22 +1,30 @@
 package com.sivan.brickradar.repository
 
+import com.sivan.brickradar.model.AddMissingPartRequest
 import com.sivan.brickradar.model.AddModelRequest
 import com.sivan.brickradar.model.AddSourceRequest
 import com.sivan.brickradar.model.AppVersionResponse
 import com.sivan.brickradar.model.Brick4SearchResult
+import com.sivan.brickradar.model.BuildStatusUpdateRequest
 import com.sivan.brickradar.model.Category
 import com.sivan.brickradar.model.CategoryUpdateRequest
 import com.sivan.brickradar.model.Model
 import com.sivan.brickradar.model.ModelUpdateRequest
+import com.sivan.brickradar.model.MissingPartsResponse
+import com.sivan.brickradar.model.OrderNumberUpdateRequest
+import com.sivan.brickradar.model.RebrickableSetNumUpdateRequest
+import com.sivan.brickradar.model.Receipt
 import com.sivan.brickradar.model.SourceOverrideRequest
 import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
+import com.sivan.brickradar.model.ToggleMissingPartFoundRequest
 import com.sivan.brickradar.model.UpdateSourceRequest
 import com.sivan.brickradar.network.BrickRadarApi
 import com.sivan.brickradar.network.GitHubReleasesApi
 import com.sivan.brickradar.network.RetrofitClient
 import com.squareup.moshi.Json
 import java.io.IOException
+import okhttp3.MultipartBody
 import retrofit2.HttpException
 
 class ModelRepository(
@@ -76,8 +84,8 @@ class ModelRepository(
         api.updateStatus(id, StatusUpdateRequest(status))
     }
 
-    suspend fun updateModel(id: Int, name: String, pieceCount: Int, category: String): ApiResult<Model> = safeCall {
-        api.updateModel(id, ModelUpdateRequest(name, pieceCount, category))
+    suspend fun updateModel(id: Int, name: String, pieceCount: Int, category: String, notes: String): ApiResult<Model> = safeCall {
+        api.updateModel(id, ModelUpdateRequest(name, pieceCount, category, notes))
     }
 
     // POST /api/models ignorerar helt ett ev. category-fält i body:n — servern
@@ -177,6 +185,76 @@ class ModelRepository(
         }
     }
 
+    // --- Issue #17 (mirroring mould-king-tracker issue #5) ---------------
+
+    suspend fun updateBuildStatus(id: Int, buildStatus: String?): ApiResult<Model> = safeCall {
+        api.updateBuildStatus(id, BuildStatusUpdateRequest(buildStatus))
+    }
+
+    suspend fun updateOrderNumber(id: Int, orderNumber: String): ApiResult<Model> = safeCall {
+        api.updateOrderNumber(id, OrderNumberUpdateRequest(orderNumber))
+    }
+
+    suspend fun updateRebrickableSetNum(id: Int, rebrickableSetNum: String): ApiResult<Model> = safeCall {
+        api.updateRebrickableSetNum(id, RebrickableSetNumUpdateRequest(rebrickableSetNum))
+    }
+
+    suspend fun uploadBuildPhoto(id: Int, photo: MultipartBody.Part): ApiResult<Model> = safeCall {
+        api.uploadBuildPhoto(id, photo)
+    }
+
+    suspend fun deleteBuildPhoto(id: Int): ApiResult<Model> = safeCall {
+        api.deleteBuildPhoto(id)
+    }
+
+    suspend fun getMissingParts(id: Int): ApiResult<MissingPartsResponse> = safeCall {
+        api.getMissingParts(id)
+    }
+
+    suspend fun addMissingPart(
+        id: Int,
+        name: String,
+        partNum: String?,
+        colorName: String?,
+        quantity: Int,
+        sourceNote: String?,
+    ): ApiResult<MissingPartsResponse> = safeCall {
+        api.addMissingPart(id, AddMissingPartRequest(name, partNum, colorName, quantity, sourceNote)).close()
+        api.getMissingParts(id)
+    }
+
+    suspend fun toggleMissingPartFound(id: Int, partId: Int, found: Boolean): ApiResult<MissingPartsResponse> = safeCall {
+        api.toggleMissingPartFound(id, partId, ToggleMissingPartFoundRequest(found)).close()
+        api.getMissingParts(id)
+    }
+
+    suspend fun deleteMissingPart(id: Int, partId: Int): ApiResult<MissingPartsResponse> = safeCall {
+        api.deleteMissingPart(id, partId).close()
+        api.getMissingParts(id)
+    }
+
+    // POST .../missing-parts/sync kräver rebrickable_set_num satt (400 annars)
+    // och REBRICKABLE_*-nycklar konfigurerade server-side (503 annars) — se
+    // parseErrorMessage/safeCall nedan för hur de felmeddelandena når fram.
+    suspend fun syncMissingParts(id: Int): ApiResult<MissingPartsResponse> = safeCall {
+        api.syncMissingParts(id).close()
+        api.getMissingParts(id)
+    }
+
+    suspend fun getReceipts(id: Int): ApiResult<List<Receipt>> = safeCall {
+        api.getReceipts(id)
+    }
+
+    suspend fun uploadReceipts(id: Int, files: List<MultipartBody.Part>): ApiResult<List<Receipt>> = safeCall {
+        api.uploadReceipts(id, files).close()
+        api.getReceipts(id)
+    }
+
+    suspend fun deleteReceipt(id: Int, receiptId: Int): ApiResult<List<Receipt>> = safeCall {
+        api.deleteReceipt(receiptId).close()
+        api.getReceipts(id)
+    }
+
     private suspend inline fun <T> safeCall(crossinline block: suspend () -> T): ApiResult<T> {
         return try {
             ApiResult.Success(block())
@@ -190,6 +268,10 @@ class ModelRepository(
                 // i svaret men appen navigerar inte dit automatiskt (utanför scope
                 // för Fas 6 — enbart manuell inmatning, ingen dubblettnavigering än).
                 409 -> parseErrorMessage(e) ?: "Modellen finns redan"
+                // 502/503: missing-parts/sync (Rebrickable-fel/inte konfigurerad,
+                // se api.py: api_sync_missing_parts) — servern skickar alltid ett
+                // specifikt {"error": "..."} för dessa, samma som 400/409 ovan.
+                502, 503 -> parseErrorMessage(e) ?: "Serverfel (${e.code()})"
                 else -> "Serverfel (${e.code()})"
             }
             ApiResult.Error(message)

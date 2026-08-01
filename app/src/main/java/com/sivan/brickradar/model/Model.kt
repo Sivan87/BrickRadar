@@ -36,9 +36,28 @@ data class Model(
     @Json(name = "best_value_rating") val bestValueRating: String?,
     @Json(name = "price_trend") val priceTrend: PriceTrend?,
     val prices: List<Source> = emptyList(),
+    // Issue #17 (mirroring mould-king-tracker issue #5) — byggstatus/saknade
+    // delar/eget foto/ordernummer/kvitton, bara meningsfulla när status =
+    // "owned" (se api.py: _apply_model_fields, samma regel kontrolleras
+    // server-side). build_status är NULL tills användaren valt ett värde.
+    @Json(name = "build_status") val buildStatus: String? = null,
+    @Json(name = "build_completed_at") val buildCompletedAt: String? = null,
+    @Json(name = "own_photo_url") val ownPhotoUrl: String? = null,
+    @Json(name = "order_number") val orderNumber: String? = null,
+    @Json(name = "rebrickable_set_num") val rebrickableSetNum: String? = null,
+    @Json(name = "missing_parts_synced_at") val missingPartsSyncedAt: String? = null,
+    @Json(name = "missing_parts_status_since") val missingPartsStatusSince: String? = null,
+    @Json(name = "missing_parts_inactivity") val missingPartsInactivity: MissingPartsInactivity? = null,
 ) {
     val isOfficialSet: Boolean get() = isOfficial != 0
 }
+
+// Delas av Model.missingPartsInactivity och MissingPartsResponse.inactivity
+// (samma form returneras på båda ställena, se api.py: _missing_parts_inactivity).
+data class MissingPartsInactivity(
+    val days: Int,
+    val stale: Boolean,
+)
 
 data class PriceTrend(
     val pct: Double?,

@@ -1,23 +1,33 @@
 package com.sivan.brickradar.network
 
+import com.sivan.brickradar.model.AddMissingPartRequest
 import com.sivan.brickradar.model.AddModelRequest
 import com.sivan.brickradar.model.AddSourceRequest
 import com.sivan.brickradar.model.Brick4SearchResult
+import com.sivan.brickradar.model.BuildStatusUpdateRequest
 import com.sivan.brickradar.model.CategoriesResponse
 import com.sivan.brickradar.model.CategoryUpdateRequest
 import com.sivan.brickradar.model.Model
 import com.sivan.brickradar.model.ModelUpdateRequest
+import com.sivan.brickradar.model.MissingPartsResponse
+import com.sivan.brickradar.model.OrderNumberUpdateRequest
+import com.sivan.brickradar.model.RebrickableSetNumUpdateRequest
+import com.sivan.brickradar.model.Receipt
 import com.sivan.brickradar.model.SourceOverrideRequest
 import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
+import com.sivan.brickradar.model.ToggleMissingPartFoundRequest
 import com.sivan.brickradar.model.UpdateSourceRequest
+import okhttp3.MultipartBody
 import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -82,4 +92,59 @@ interface BrickRadarApi {
 
     @DELETE("api/models/{id}/source-override/{source}")
     suspend fun deleteSourceOverride(@Path("id") modelId: Int, @Path("source") source: String): ResponseBody
+
+    // --- Issue #17 (mirroring mould-king-tracker issue #5) ---------------
+
+    @PATCH("api/models/{id}/build-status")
+    suspend fun updateBuildStatus(@Path("id") id: Int, @Body request: BuildStatusUpdateRequest): Model
+
+    // Samma delade PUT /models/{id} som updateModel/updateCategory ovan, bara
+    // med ett smalare body-fält var — se kommentaren vid CategoryUpdateRequest.
+    @PUT("api/models/{id}")
+    suspend fun updateOrderNumber(@Path("id") id: Int, @Body request: OrderNumberUpdateRequest): Model
+
+    @PUT("api/models/{id}")
+    suspend fun updateRebrickableSetNum(@Path("id") id: Int, @Body request: RebrickableSetNumUpdateRequest): Model
+
+    @Multipart
+    @POST("api/models/{id}/build-photo")
+    suspend fun uploadBuildPhoto(@Path("id") id: Int, @Part photo: MultipartBody.Part): Model
+
+    @DELETE("api/models/{id}/build-photo")
+    suspend fun deleteBuildPhoto(@Path("id") id: Int): Model
+
+    @GET("api/models/{id}/missing-parts")
+    suspend fun getMissingParts(@Path("id") id: Int): MissingPartsResponse
+
+    // Svarsformen (bara {"parts": [...]}, utan total/found_count/synced_at)
+    // används aldrig direkt — ModelRepository hämtar alltid om hela
+    // GET .../missing-parts efteråt, samma "trust the re-fetch, not the
+    // mutation response" mönster som addSource/updateSource redan använder.
+    @POST("api/models/{id}/missing-parts")
+    suspend fun addMissingPart(@Path("id") id: Int, @Body request: AddMissingPartRequest): ResponseBody
+
+    @PATCH("api/models/{id}/missing-parts/{partId}")
+    suspend fun toggleMissingPartFound(
+        @Path("id") id: Int,
+        @Path("partId") partId: Int,
+        @Body request: ToggleMissingPartFoundRequest,
+    ): ResponseBody
+
+    @DELETE("api/models/{id}/missing-parts/{partId}")
+    suspend fun deleteMissingPart(@Path("id") id: Int, @Path("partId") partId: Int): ResponseBody
+
+    @POST("api/models/{id}/missing-parts/sync")
+    suspend fun syncMissingParts(@Path("id") id: Int): ResponseBody
+
+    @GET("api/models/{id}/receipts")
+    suspend fun getReceipts(@Path("id") id: Int): List<Receipt>
+
+    // Fältnamn "files" (flera tillåtna i samma anrop) — se api.py:
+    // api_upload_receipts.
+    @Multipart
+    @POST("api/models/{id}/receipts")
+    suspend fun uploadReceipts(@Path("id") id: Int, @Part files: List<MultipartBody.Part>): ResponseBody
+
+    @DELETE("api/receipts/{receiptId}")
+    suspend fun deleteReceipt(@Path("receiptId") receiptId: Int): ResponseBody
 }

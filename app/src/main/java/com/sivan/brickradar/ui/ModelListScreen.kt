@@ -94,6 +94,8 @@ import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
 import com.sivan.brickradar.ui.theme.TextPrimary
 import com.sivan.brickradar.ui.theme.TextSecondary
+import com.sivan.brickradar.util.buildStatusColor
+import com.sivan.brickradar.util.buildStatusLabel
 import com.sivan.brickradar.util.colorForValueRating
 import com.sivan.brickradar.viewmodel.ListViewMode
 import com.sivan.brickradar.viewmodel.ModelListFilters
@@ -488,9 +490,33 @@ private fun CompactModelListRowContent(model: Model, hasPrice: Boolean, cheapest
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
+            BuildStatusInlineBadge(model = model)
         }
         PriceColumn(model = model, hasPrice = hasPrice, cheapest = cheapest)
         Text(text = "›", style = MaterialTheme.typography.titleLarge, color = TextMutedMost, modifier = Modifier.padding(start = 6.dp))
+    }
+}
+
+// Issue #17 (mirroring mould-king-tracker issue #5) — kompakt byggstatus-rad
+// för listvyn (bild+namn/kontext-layouten har ingen egen badge-yta som
+// rutvyns bild-overlay, se ModelGridCard ovan), bara synlig när ett
+// byggstatus-värde faktiskt är satt.
+@Composable
+private fun BuildStatusInlineBadge(model: Model) {
+    val buildStatus = model.buildStatus ?: return
+    Row(modifier = Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = buildStatusLabel(buildStatus) ?: buildStatus,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = buildStatusColor(buildStatus),
+        )
+        if (model.missingPartsInactivity?.stale == true) {
+            Text(
+                text = " ⚠",
+                style = MaterialTheme.typography.labelSmall,
+                color = NegativeRed,
+            )
+        }
     }
 }
 
@@ -544,6 +570,7 @@ private fun WideModelListRowContent(model: Model, categories: List<Category>, ha
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 3.dp),
             )
+            BuildStatusInlineBadge(model = model)
         }
         PriceColumn(
             modifier = Modifier.weight(1f),
@@ -643,19 +670,42 @@ private fun ModelGridCard(model: Model, onClick: () -> Unit) {
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(ImagePlaceholder))
             }
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(statusStripeColor(model.status))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                Text(
-                    text = statusLabel(model.status).uppercase(),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = AppBackground,
-                )
+            Column(modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(statusStripeColor(model.status))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = statusLabel(model.status).uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = AppBackground,
+                    )
+                }
+                // Issue #17 (mirroring mould-king-tracker issue #5) — byggstatus-
+                // badge, bara synlig när ett värde faktiskt är satt (kräver
+                // status == "owned" server-side, se util/BuildStatus.kt).
+                model.buildStatus?.let { buildStatus ->
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(buildStatusColor(buildStatus))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = buildStatusLabel(buildStatus)?.uppercase() ?: buildStatus.uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = AppBackground,
+                            )
+                            if (model.missingPartsInactivity?.stale == true) {
+                                Text(text = " ⚠", style = MaterialTheme.typography.labelSmall, color = AppBackground)
+                            }
+                        }
+                    }
+                }
             }
             model.priceTrend?.pct?.let { pct ->
                 TrendBadge(pct = pct, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))

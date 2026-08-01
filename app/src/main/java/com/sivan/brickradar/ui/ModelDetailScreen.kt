@@ -1,5 +1,10 @@
 package com.sivan.brickradar.ui
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +35,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -61,18 +68,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.sivan.brickradar.model.COUNTRIES
 import com.sivan.brickradar.model.CURRENCIES
 import com.sivan.brickradar.model.Category
+import com.sivan.brickradar.model.MissingPart
+import com.sivan.brickradar.model.MissingPartsResponse
 import com.sivan.brickradar.model.Model
+import com.sivan.brickradar.model.Receipt
 import com.sivan.brickradar.model.Source
 import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.UNCATEGORIZED_KEY
 import com.sivan.brickradar.model.flagForWarehouse
+import com.sivan.brickradar.network.ApiConfig
 import com.sivan.brickradar.ui.theme.AccentGold
 import com.sivan.brickradar.ui.theme.AppBackground
 import com.sivan.brickradar.ui.theme.CardBackground
@@ -91,12 +106,15 @@ import com.sivan.brickradar.ui.theme.TextMutedMore
 import com.sivan.brickradar.ui.theme.TextMutedMost
 import com.sivan.brickradar.ui.theme.TextPrimary
 import com.sivan.brickradar.ui.theme.TextSecondary
+import com.sivan.brickradar.util.BUILD_STATUS_OPTIONS
 import com.sivan.brickradar.util.classifyValue
 import com.sivan.brickradar.util.colorForValueRating
+import com.sivan.brickradar.util.uriToMultipartPart
 import com.sivan.brickradar.util.valueLevelsFor
 import com.sivan.brickradar.viewmodel.ModelDetailEvent
 import com.sivan.brickradar.viewmodel.ModelDetailUiState
 import com.sivan.brickradar.viewmodel.ModelDetailViewModel
+import okhttp3.MultipartBody
 
 private val STATUS_OPTIONS = listOf(
     "new" to "Sök",
@@ -124,7 +142,22 @@ fun ModelDetailScreen(
     var editingSource by remember { mutableStateOf<Source?>(null) }
     var pendingDeleteSource by remember { mutableStateOf<Source?>(null) }
     var pendingDeleteModel by remember { mutableStateOf(false) }
+    var pendingDeleteBuildPhoto by remember { mutableStateOf(false) }
+    var showMissingPartsDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Issue #17 (mirroring mould-king-tracker issue #5) — saknade delar/
+    // kvitton är egna StateFlows (se kommentaren i ModelDetailViewModel för
+    // varför), inte en del av uiState.
+    val missingParts by viewModel.missingParts.collectAsState()
+    val isMissingPartsLoading by viewModel.isMissingPartsLoading.collectAsState()
+    val isSyncingMissingParts by viewModel.isSyncingMissingParts.collectAsState()
+    val isAddingMissingPart by viewModel.isAddingMissingPart.collectAsState()
+    val togglingMissingPartId by viewModel.togglingMissingPartId.collectAsState()
+    val deletingMissingPartId by viewModel.deletingMissingPartId.collectAsState()
+    val receipts by viewModel.receipts.collectAsState()
+    val isUploadingReceipts by viewModel.isUploadingReceipts.collectAsState()
+    val deletingReceiptId by viewModel.deletingReceiptId.collectAsState()
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -182,7 +215,7 @@ fun ModelDetailScreen(
                             model = state.model,
                             categories = categories,
                             isSaving = state.isSavingEdit,
-                            onSave = { name, pieceCount, category -> viewModel.updateModel(name, pieceCount, category) },
+                            onSave = { name, pieceCount, category, notes -> viewModel.updateModel(name, pieceCount, category, notes) },
                             onCancel = { isEditing = false },
                         )
                     } else {
@@ -192,6 +225,16 @@ fun ModelDetailScreen(
                             stats = stats,
                             isUpdatingStatus = state.isUpdatingStatus,
                             deletingSourceId = state.deletingSourceId,
+                            isUpdatingBuildStatus = state.isUpdatingBuildStatus,
+                            isSavingOrderNumber = state.isSavingOrderNumber,
+                            isSavingRebrickableSetNum = state.isSavingRebrickableSetNum,
+                            isUploadingBuildPhoto = state.isUploadingBuildPhoto,
+                            isDeletingBuildPhoto = state.isDeletingBuildPhoto,
+                            missingParts = missingParts,
+                            isMissingPartsLoading = isMissingPartsLoading,
+                            receipts = receipts,
+                            isUploadingReceipts = isUploadingReceipts,
+                            deletingReceiptId = deletingReceiptId,
                             onStatusSelected = { viewModel.updateStatus(it) },
                             onAddSourceClick = {
                                 editingSource = null
@@ -205,6 +248,14 @@ fun ModelDetailScreen(
                             onMoveToWatching = { viewModel.updateStatus("watching") },
                             onReject = { viewModel.updateStatus("rejected") },
                             onDeleteModelClick = { pendingDeleteModel = true },
+                            onBuildStatusSelected = { viewModel.updateBuildStatus(it) },
+                            onSaveOrderNumber = { viewModel.updateOrderNumber(it) },
+                            onSaveRebrickableSetNum = { viewModel.updateRebrickableSetNum(it) },
+                            onUploadBuildPhoto = { viewModel.uploadBuildPhoto(it) },
+                            onDeleteBuildPhotoClick = { pendingDeleteBuildPhoto = true },
+                            onShowMissingPartsClick = { showMissingPartsDialog = true },
+                            onUploadReceipts = { viewModel.uploadReceipts(it) },
+                            onDeleteReceiptClick = { viewModel.deleteReceipt(it) },
                         )
                     }
                 }
@@ -252,6 +303,46 @@ fun ModelDetailScreen(
                 onDismiss = { if (!isDeleting) pendingDeleteModel = false },
             )
         }
+
+        if (pendingDeleteBuildPhoto) {
+            val isDeleting = (uiState as? ModelDetailUiState.Loaded)?.isDeletingBuildPhoto ?: false
+            AlertDialog(
+                onDismissRequest = { if (!isDeleting) pendingDeleteBuildPhoto = false },
+                title = { Text("Ta bort foto") },
+                text = { Text("Ta bort det egna byggfotot?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteBuildPhoto()
+                            pendingDeleteBuildPhoto = false
+                        },
+                        enabled = !isDeleting,
+                    ) { Text("Ta bort", color = NegativeRed) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingDeleteBuildPhoto = false }, enabled = !isDeleting) { Text("Avbryt") }
+                },
+            )
+        }
+
+        if (showMissingPartsDialog) {
+            loadedState?.model?.let {
+                MissingPartsDialog(
+                    missingParts = missingParts,
+                    isSyncingMissingParts = isSyncingMissingParts,
+                    isAddingMissingPart = isAddingMissingPart,
+                    togglingMissingPartId = togglingMissingPartId,
+                    deletingMissingPartId = deletingMissingPartId,
+                    onDismiss = { showMissingPartsDialog = false },
+                    onSync = { viewModel.syncMissingParts() },
+                    onAdd = { name, partNum, colorName, quantity, sourceNote ->
+                        viewModel.addMissingPart(name, partNum, colorName, quantity, sourceNote)
+                    },
+                    onToggleFound = { partId, found -> viewModel.toggleMissingPartFound(partId, found) },
+                    onDelete = { partId -> viewModel.deleteMissingPart(partId) },
+                )
+            }
+        }
     }
 }
 
@@ -262,6 +353,16 @@ private fun ModelDetail(
     stats: StatsResponse?,
     isUpdatingStatus: Boolean,
     deletingSourceId: Int?,
+    isUpdatingBuildStatus: Boolean,
+    isSavingOrderNumber: Boolean,
+    isSavingRebrickableSetNum: Boolean,
+    isUploadingBuildPhoto: Boolean,
+    isDeletingBuildPhoto: Boolean,
+    missingParts: MissingPartsResponse?,
+    isMissingPartsLoading: Boolean,
+    receipts: List<Receipt>,
+    isUploadingReceipts: Boolean,
+    deletingReceiptId: Int?,
     onStatusSelected: (String) -> Unit,
     onAddSourceClick: () -> Unit,
     onEditSourceClick: (Source) -> Unit,
@@ -269,6 +370,14 @@ private fun ModelDetail(
     onMoveToWatching: () -> Unit,
     onReject: () -> Unit,
     onDeleteModelClick: () -> Unit,
+    onBuildStatusSelected: (String?) -> Unit,
+    onSaveOrderNumber: (String) -> Unit,
+    onSaveRebrickableSetNum: (String) -> Unit,
+    onUploadBuildPhoto: (MultipartBody.Part) -> Unit,
+    onDeleteBuildPhotoClick: () -> Unit,
+    onShowMissingPartsClick: () -> Unit,
+    onUploadReceipts: (List<MultipartBody.Part>) -> Unit,
+    onDeleteReceiptClick: (Int) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Fas 12 (design t11c) -- pa breda skarmar (Galaxy Z Fold uppfalld,
@@ -299,6 +408,43 @@ private fun ModelDetail(
                                     onDeleteRequest = onDeleteSourceClick,
                                 )
                                 PriceHistorySection()
+                                NotesDisplayRow(notes = model.notes)
+                                if (model.status == "owned") {
+                                    BuildStatusSection(
+                                        model = model,
+                                        isUpdating = isUpdatingBuildStatus,
+                                        onSelect = onBuildStatusSelected,
+                                    )
+                                    OwnPhotoSection(
+                                        model = model,
+                                        isUploading = isUploadingBuildPhoto,
+                                        isDeleting = isDeletingBuildPhoto,
+                                        onUpload = onUploadBuildPhoto,
+                                        onDeleteClick = onDeleteBuildPhotoClick,
+                                    )
+                                    if (model.buildStatus == "pagaende_saknar_delar") {
+                                        MissingPartsCompactSection(
+                                            model = model,
+                                            missingParts = missingParts,
+                                            isLoading = isMissingPartsLoading,
+                                            isSavingRebrickableSetNum = isSavingRebrickableSetNum,
+                                            onSaveRebrickableSetNum = onSaveRebrickableSetNum,
+                                            onShowAllClick = onShowMissingPartsClick,
+                                        )
+                                    }
+                                    OrderNumberSection(
+                                        model = model,
+                                        isSaving = isSavingOrderNumber,
+                                        onSave = onSaveOrderNumber,
+                                    )
+                                    ReceiptsSection(
+                                        receipts = receipts,
+                                        isUploading = isUploadingReceipts,
+                                        deletingReceiptId = deletingReceiptId,
+                                        onUpload = onUploadReceipts,
+                                        onDeleteClick = onDeleteReceiptClick,
+                                    )
+                                }
                             }
                             Column(modifier = Modifier.width(260.dp)) {
                                 ToolsSection(onAddSourceClick = onAddSourceClick)
@@ -319,6 +465,43 @@ private fun ModelDetail(
                                 onDeleteRequest = onDeleteSourceClick,
                             )
                             PriceHistorySection()
+                            NotesDisplayRow(notes = model.notes)
+                            if (model.status == "owned") {
+                                BuildStatusSection(
+                                    model = model,
+                                    isUpdating = isUpdatingBuildStatus,
+                                    onSelect = onBuildStatusSelected,
+                                )
+                                OwnPhotoSection(
+                                    model = model,
+                                    isUploading = isUploadingBuildPhoto,
+                                    isDeleting = isDeletingBuildPhoto,
+                                    onUpload = onUploadBuildPhoto,
+                                    onDeleteClick = onDeleteBuildPhotoClick,
+                                )
+                                if (model.buildStatus == "pagaende_saknar_delar") {
+                                    MissingPartsCompactSection(
+                                        model = model,
+                                        missingParts = missingParts,
+                                        isLoading = isMissingPartsLoading,
+                                        isSavingRebrickableSetNum = isSavingRebrickableSetNum,
+                                        onSaveRebrickableSetNum = onSaveRebrickableSetNum,
+                                        onShowAllClick = onShowMissingPartsClick,
+                                    )
+                                }
+                                OrderNumberSection(
+                                    model = model,
+                                    isSaving = isSavingOrderNumber,
+                                    onSave = onSaveOrderNumber,
+                                )
+                                ReceiptsSection(
+                                    receipts = receipts,
+                                    isUploading = isUploadingReceipts,
+                                    deletingReceiptId = deletingReceiptId,
+                                    onUpload = onUploadReceipts,
+                                    onDeleteClick = onDeleteReceiptClick,
+                                )
+                            }
                             ToolsSection(onAddSourceClick = onAddSourceClick)
                             FactsSection(model = model, categories = categories)
                             if (model.status == "new") {
@@ -706,6 +889,549 @@ private fun FactRow(label: String, value: String) {
     }
 }
 
+// --- Issue #17 (mirroring mould-king-tracker issue #5) --------------------
+
+// Anteckningsfältet är oberoende av byggstatus/status (issue #5, del 2) —
+// alltid synligt, till skillnad från byggstatus/eget foto/ordernummer/kvitton
+// nedan som alla är gated på status == "owned". Redigeras via samma
+// pennikon-formulär som namn/delantal/kategori (EditableModelDetail ovan) —
+// ingen egen inline-redigering, för att inte introducera ett andra
+// redigeringsläge i en app som redan har ett etablerat mönster för det.
+@Composable
+private fun NotesDisplayRow(notes: String?) {
+    val text = notes?.trim().orEmpty()
+    SectionLabel("ANTECKNING")
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(width = 1.dp, color = CardBorderMuted, shape = RoundedCornerShape(12.dp))
+            .background(PanelBackground)
+            .padding(12.dp),
+    ) {
+        Text(
+            text = text.ifBlank { "Ingen anteckning — tryck på pennikonen för att lägga till" },
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (text.isBlank()) TextMutedMost else TextSecondary,
+        )
+    }
+}
+
+@Composable
+private fun BuildStatusSection(model: Model, isUpdating: Boolean, onSelect: (String?) -> Unit) {
+    SectionLabel("BYGGSTATUS")
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BUILD_STATUS_OPTIONS.forEach { (key, label) ->
+            DetailPillChip(
+                selected = key == model.buildStatus,
+                label = label,
+                enabled = !isUpdating,
+                onClick = { onSelect(if (model.buildStatus == key) null else key) },
+            )
+        }
+        if (isUpdating) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = AccentGold)
+        }
+    }
+    if (model.buildStatus == "byggd" && model.buildCompletedAt != null) {
+        Text(
+            text = "Byggd: ${model.buildCompletedAt}",
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+            color = TextMutedMore,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    val inactivity = model.missingPartsInactivity
+    if (model.buildStatus == "pagaende_saknar_delar" && inactivity?.stale == true) {
+        Text(
+            text = "⚠ Inga uppdateringar på ${inactivity.days} dagar",
+            style = MaterialTheme.typography.bodySmall,
+            color = NegativeRed,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun OwnPhotoSection(
+    model: Model,
+    isUploading: Boolean,
+    isDeleting: Boolean,
+    onUpload: (MultipartBody.Part) -> Unit,
+    onDeleteClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    val pickPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            uriToMultipartPart(context.contentResolver, uri, "photo")?.let(onUpload)
+        }
+    }
+
+    SectionLabel("EGET FOTO")
+    if (model.ownPhotoUrl != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(ImagePlaceholder),
+        ) {
+            AsyncImage(
+                model = ApiConfig.authenticatedUrl("api/models/${model.id}/build-photo"),
+                contentDescription = "Eget foto av byggd modell",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(
+            onClick = { pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            enabled = !isUploading,
+        ) {
+            if (isUploading) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentGold)
+            } else {
+                Text(if (model.ownPhotoUrl != null) "Byt foto" else "Ladda upp foto")
+            }
+        }
+        if (model.ownPhotoUrl != null) {
+            TextButton(onClick = onDeleteClick, enabled = !isDeleting) {
+                if (isDeleting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = NegativeRed)
+                } else {
+                    Text("Ta bort", color = NegativeRed)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OrderNumberSection(model: Model, isSaving: Boolean, onSave: (String) -> Unit) {
+    var text by remember(model.id, model.orderNumber) { mutableStateOf(model.orderNumber ?: "") }
+    SectionLabel("ORDERNUMMER")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            placeholder = { Text("t.ex. #12345") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        val changed = text.trim() != (model.orderNumber ?: "")
+        TextButton(onClick = { onSave(text.trim()) }, enabled = changed && !isSaving) {
+            if (isSaving) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentGold)
+            } else {
+                Text("Spara")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingPartsCompactSection(
+    model: Model,
+    missingParts: MissingPartsResponse?,
+    isLoading: Boolean,
+    isSavingRebrickableSetNum: Boolean,
+    onSaveRebrickableSetNum: (String) -> Unit,
+    onShowAllClick: () -> Unit,
+) {
+    var setNumText by remember(model.id, model.rebrickableSetNum) { mutableStateOf(model.rebrickableSetNum ?: "") }
+    SectionLabel("SAKNADE DELAR")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = setNumText,
+            onValueChange = { setNumText = it },
+            label = { Text("Rebrickable-setnummer") },
+            placeholder = { Text("t.ex. 75192-1") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        val changed = setNumText.trim() != (model.rebrickableSetNum ?: "")
+        TextButton(onClick = { onSaveRebrickableSetNum(setNumText.trim()) }, enabled = changed && !isSavingRebrickableSetNum) {
+            if (isSavingRebrickableSetNum) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentGold)
+            } else {
+                Text("Spara")
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(width = 1.dp, color = CardBorder, shape = RoundedCornerShape(12.dp))
+            .clickable(onClick = onShowAllClick)
+            .padding(12.dp),
+    ) {
+        if (isLoading && missingParts == null) {
+            Text(text = "Hämtar saknade delar…", style = MaterialTheme.typography.bodyMedium, color = TextMutedMore)
+        } else if (missingParts == null) {
+            Text(text = "Tryck för att se saknade delar", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+        } else {
+            Column {
+                Text(
+                    text = "${missingParts.total - missingParts.foundCount} av ${missingParts.total} delar saknas",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                )
+                Text(
+                    text = "Senast synkad: ${missingParts.syncedAt ?: "aldrig"} · Visa alla ›",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMutedMore,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReceiptsSection(
+    receipts: List<Receipt>,
+    isUploading: Boolean,
+    deletingReceiptId: Int?,
+    onUpload: (List<MultipartBody.Part>) -> Unit,
+    onDeleteClick: (Int) -> Unit,
+) {
+    val context = LocalContext.current
+    val pickFilesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        val parts = uris.mapNotNull { uriToMultipartPart(context.contentResolver, it, "files") }
+        if (parts.isNotEmpty()) onUpload(parts)
+    }
+
+    SectionLabel("KVITTON")
+    if (receipts.isEmpty()) {
+        Text(text = "Inga kvitton tillagda ännu", style = MaterialTheme.typography.bodyMedium, color = TextMutedMore)
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            receipts.forEach { receipt ->
+                ReceiptRow(
+                    receipt = receipt,
+                    isDeleting = deletingReceiptId == receipt.id,
+                    onOpenClick = {
+                        val url = ApiConfig.authenticatedUrl("api/receipts/${receipt.id}/file")
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    },
+                    onDeleteClick = { onDeleteClick(receipt.id) },
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(width = 1.dp, color = CardBorder, shape = RoundedCornerShape(12.dp))
+            .clickable(enabled = !isUploading) { pickFilesLauncher.launch(arrayOf("image/*", "application/pdf")) }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isUploading) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentGold)
+        } else {
+            Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = TextMuted)
+        }
+        Text(
+            text = "Lägg till kvitto",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMuted,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ReceiptRow(receipt: Receipt, isDeleting: Boolean, onOpenClick: () -> Unit, onDeleteClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CardBackground)
+            .border(width = 1.dp, color = CardBorder, shape = RoundedCornerShape(10.dp))
+            .clickable(onClick = onOpenClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = receipt.originalFilename ?: receipt.filename,
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = receipt.uploadedAt,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont),
+                color = TextMutedMore,
+            )
+        }
+        if (isDeleting) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentGold)
+        } else {
+            IconButton(onClick = onDeleteClick, modifier = Modifier.size(32.dp)) {
+                Icon(imageVector = Icons.Default.Delete, contentDescription = "Ta bort kvitto", tint = TextMutedMore, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingPartsDialog(
+    missingParts: MissingPartsResponse?,
+    isSyncingMissingParts: Boolean,
+    isAddingMissingPart: Boolean,
+    togglingMissingPartId: Int?,
+    deletingMissingPartId: Int?,
+    onDismiss: () -> Unit,
+    onSync: () -> Unit,
+    onAdd: (name: String, partNum: String?, colorName: String?, quantity: Int, sourceNote: String?) -> Unit,
+    onToggleFound: (partId: Int, found: Boolean) -> Unit,
+    onDelete: (partId: Int) -> Unit,
+) {
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    var showAddForm by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(modifier = Modifier.fillMaxSize().background(AppBackground)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = "Saknade delar", style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+                IconButton(onClick = onDismiss) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Stäng", tint = TextMuted)
+                }
+            }
+            Column(modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Sök delnamn/nummer") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onSync, enabled = !isSyncingMissingParts) {
+                        if (isSyncingMissingParts) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentGold)
+                        } else {
+                            Text("⟳ Synka mot Rebrickable")
+                        }
+                    }
+                    TextButton(onClick = { showAddForm = !showAddForm }) {
+                        Text(if (showAddForm) "Avbryt" else "+ Lägg till manuellt")
+                    }
+                }
+                if (showAddForm) {
+                    AddMissingPartForm(
+                        isSaving = isAddingMissingPart,
+                        onSubmit = { name, partNum, colorName, quantity, sourceNote ->
+                            onAdd(name, partNum, colorName, quantity, sourceNote)
+                            showAddForm = false
+                        },
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            val parts = missingParts?.parts.orEmpty().filter {
+                query.isBlank() ||
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.partNum?.contains(query, ignoreCase = true) == true
+            }
+            val grouped = parts.groupBy { it.colorName ?: "Okänd färg" }.toSortedMap()
+            if (parts.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = if (missingParts == null) "Laddar…" else "Inga saknade delar",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMutedMore,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
+                ) {
+                    grouped.forEach { (colorName, partsInGroup) ->
+                        item(key = "header-$colorName") {
+                            Text(
+                                text = colorName,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 6.dp),
+                            )
+                        }
+                        items(partsInGroup, key = { it.id }) { part ->
+                            MissingPartRow(
+                                part = part,
+                                isToggling = togglingMissingPartId == part.id,
+                                isDeleting = deletingMissingPartId == part.id,
+                                onToggleFound = { onToggleFound(part.id, !part.isFound) },
+                                onDelete = { onDelete(part.id) },
+                                onOpenBuyLink = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MissingPartRow(
+    part: MissingPart,
+    isToggling: Boolean,
+    isDeleting: Boolean,
+    onToggleFound: () -> Unit,
+    onDelete: () -> Unit,
+    onOpenBuyLink: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(CardBackground)
+            .border(width = 1.dp, color = CardBorder, shape = RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isToggling) {
+            Box(modifier = Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentGold)
+            }
+        } else {
+            Checkbox(
+                checked = part.isFound,
+                onCheckedChange = { onToggleFound() },
+                colors = CheckboxDefaults.colors(checkedColor = AccentGold, uncheckedColor = TextMuted),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "${part.quantity}x ${part.name}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (part.isFound) TextMutedMore else TextPrimary,
+            )
+            val meta = listOfNotNull(part.partNum, part.sourceNote).joinToString(" · ")
+            if (meta.isNotBlank()) {
+                Text(text = meta, style = MaterialTheme.typography.bodySmall.copy(fontFamily = MonoFont), color = TextMutedMore)
+            }
+            val buyLinks = part.buyLinks
+            if (buyLinks != null && (buyLinks.bricklink != null || buyLinks.brickowl != null)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    buyLinks.bricklink?.let { url ->
+                        Text(
+                            text = "BrickLink",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = AccentGold,
+                            modifier = Modifier.clickable { onOpenBuyLink(url) },
+                        )
+                    }
+                    buyLinks.brickowl?.let { url ->
+                        Text(
+                            text = "BrickOwl",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = AccentGold,
+                            modifier = Modifier.clickable { onOpenBuyLink(url) },
+                        )
+                    }
+                }
+            }
+        }
+        if (isDeleting) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = AccentGold)
+        } else {
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                Icon(imageVector = Icons.Default.Delete, contentDescription = "Ta bort", tint = TextMutedMore, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddMissingPartForm(
+    isSaving: Boolean,
+    onSubmit: (name: String, partNum: String?, colorName: String?, quantity: Int, sourceNote: String?) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var partNum by remember { mutableStateOf("") }
+    var colorName by remember { mutableStateOf("") }
+    var quantityText by remember { mutableStateOf("1") }
+    val quantity = quantityText.toIntOrNull()
+    val canSubmit = name.isNotBlank() && quantity != null && quantity > 0 && !isSaving
+
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Delnamn") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = partNum,
+                onValueChange = { partNum = it },
+                label = { Text("Delnummer") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = quantityText,
+                onValueChange = { input -> quantityText = input.filter { it.isDigit() } },
+                label = { Text("Antal") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                modifier = Modifier.width(90.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = colorName,
+            onValueChange = { colorName = it },
+            label = { Text("Färg") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                quantity?.let {
+                    onSubmit(name.trim(), partNum.trim().ifBlank { null }, colorName.trim().ifBlank { null }, it, null)
+                }
+            },
+            enabled = canSubmit,
+        ) {
+            if (isSaving) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            } else {
+                Text("Lägg till")
+            }
+        }
+    }
+}
+
 // Fas 12 (audit av t1-t10, rond 9a/11c) -- den fasta fotraden ar EN
 // tva-knapps rad (Avsla + Flytta till bevakning), inte tre -- "Ta bort" bor
 // enligt mockupen i den skrollande ytan (se DeleteModelRow nedan), inte i den
@@ -765,12 +1491,13 @@ private fun EditableModelDetail(
     model: Model,
     categories: List<Category>,
     isSaving: Boolean,
-    onSave: (name: String, pieceCount: Int, category: String) -> Unit,
+    onSave: (name: String, pieceCount: Int, category: String, notes: String) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember(model.id) { mutableStateOf(model.name ?: "") }
     var pieceCountText by remember(model.id) { mutableStateOf(model.pieceCount?.toString() ?: "") }
     var selectedCategory by remember(model.id) { mutableStateOf(model.category ?: UNCATEGORIZED_KEY) }
+    var notes by remember(model.id) { mutableStateOf(model.notes ?: "") }
 
     val nameError = name.isBlank()
     val pieceCount = pieceCountText.toIntOrNull()
@@ -818,10 +1545,18 @@ private fun EditableModelDetail(
                 )
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            label = { Text("Anteckningar") },
+            placeholder = { Text("Egna kommentarer om modellen") },
+            modifier = Modifier.fillMaxWidth().height(120.dp),
+        )
         Spacer(modifier = Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
-                onClick = { pieceCount?.let { onSave(name.trim(), it, selectedCategory) } },
+                onClick = { pieceCount?.let { onSave(name.trim(), it, selectedCategory, notes.trim()) } },
                 enabled = canSave,
             ) {
                 if (isSaving) {

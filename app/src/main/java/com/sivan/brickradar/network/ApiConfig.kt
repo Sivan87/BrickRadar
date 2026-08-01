@@ -9,4 +9,12 @@ object ApiConfig {
     // Ändras servern av dator/nätverk måste API_BASE_URL uppdateras i gradle.properties.
     val BASE_URL: String = BuildConfig.API_BASE_URL
     val API_KEY: String = BuildConfig.API_KEY
+
+    // För <img>-liknande anrop som inte kan sätta en X-API-Key-header (Coils
+    // AsyncImage, eller en Intent(ACTION_VIEW) mot ett kvitto) — _require_api_key
+    // (api.py, mould-king-tracker) accepterar nyckeln som ?api_key=-query-
+    // parameter på ALLA /api/*-routes, inte bara bild-/foto-endpointerna
+    // (samma mekanism static/app.js:s modellImageUrl/buildPhotoUrl redan använder).
+    fun authenticatedUrl(path: String): String =
+        "${BASE_URL.trimEnd('/')}/$path?api_key=$API_KEY"
 }
