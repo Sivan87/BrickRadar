@@ -49,6 +49,17 @@ jobs:
       - name: Decode signing keystore
         run: base64 --decode <<< "${{ secrets.KEYSTORE_BASE64 }}" > "$RUNNER_TEMP/release.jks"
 
+      # D8-dex-merging slog i OutOfMemoryError (default Gradle-daemon-heap
+      # räckte inte, 512 MiB) första gången detta workflow kördes efter att
+      # appen växt över många faser — projektets EGNA gradle.properties är
+      # gitignorad (håller signeringslösenord/API-nyckel i klartext lokalt,
+      # se CLAUDE.md), så CI hade ingen org.gradle.jvmargs-inställning alls.
+      # Skrivs till GRADLE_USER_HOME istället för att röra den hemliga filen.
+      - name: Configure Gradle JVM memory
+        run: |
+          mkdir -p ~/.gradle
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m" >> ~/.gradle/gradle.properties
+
       - name: Build signed release APK
         run: |
           chmod +x ./gradlew
