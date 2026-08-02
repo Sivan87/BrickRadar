@@ -36,8 +36,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
@@ -75,6 +73,7 @@ import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.UNCATEGORIZED_KEY
 import com.sivan.brickradar.ui.theme.AccentGold
 import com.sivan.brickradar.ui.theme.AppBackground
+import com.sivan.brickradar.ui.theme.AppPillChip
 import com.sivan.brickradar.ui.theme.CardBackground
 import com.sivan.brickradar.ui.theme.CardBorder
 import com.sivan.brickradar.ui.theme.CardBorderMuted
@@ -306,27 +305,9 @@ private fun statusCount(key: String?, counts: com.sivan.brickradar.model.StatusC
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PillFilterChip(selected: Boolean, label: String, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(text = label.uppercase(), style = MaterialTheme.typography.labelMedium) },
-        shape = RoundedCornerShape(20.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent,
-            labelColor = TextMuted,
-            selectedContainerColor = AccentGold,
-            selectedLabelColor = AppBackground,
-        ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = CardBorder,
-            selectedBorderColor = AccentGold,
-        ),
-    )
+    AppPillChip(selected = selected, label = label, onClick = onClick)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

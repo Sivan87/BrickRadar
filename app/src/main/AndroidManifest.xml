@@ -8,6 +8,10 @@
          behöver slå på "installera okända appar" globalt för hela enheten
          (se UpdateViewModel: canRequestPackageInstalls/ACTION_MANAGE_UNKNOWN_APP_SOURCES). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Issue #18 (punkt 3): kameraknapp bredvid "Ladda upp foto" i eget-foto-
+         sektionen, kräver körtidsbehörighet på API 26+ (begärs i OwnPhotoSection). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="true"

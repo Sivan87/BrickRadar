@@ -1,6 +1,8 @@
 package com.sivan.brickradar.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -16,12 +18,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -39,8 +44,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -70,7 +73,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -89,7 +94,9 @@ import com.sivan.brickradar.model.UNCATEGORIZED_KEY
 import com.sivan.brickradar.model.flagForWarehouse
 import com.sivan.brickradar.network.ApiConfig
 import com.sivan.brickradar.ui.theme.AccentGold
+import com.sivan.brickradar.ui.theme.AccentGoldLink
 import com.sivan.brickradar.ui.theme.AppBackground
+import com.sivan.brickradar.ui.theme.AppPillChip
 import com.sivan.brickradar.ui.theme.CardBackground
 import com.sivan.brickradar.ui.theme.CardBorder
 import com.sivan.brickradar.ui.theme.CardBorderMuted
@@ -109,6 +116,7 @@ import com.sivan.brickradar.ui.theme.TextSecondary
 import com.sivan.brickradar.util.BUILD_STATUS_OPTIONS
 import com.sivan.brickradar.util.classifyValue
 import com.sivan.brickradar.util.colorForValueRating
+import com.sivan.brickradar.util.createCameraCaptureUri
 import com.sivan.brickradar.util.uriToMultipartPart
 import com.sivan.brickradar.util.valueLevelsFor
 import com.sivan.brickradar.viewmodel.ModelDetailEvent
@@ -398,7 +406,7 @@ private fun ModelDetail(
                             modifier = Modifier.padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
                         ) {
-                            Column(modifier = Modifier.weight(1.5f)) {
+                            Column(modifier = Modifier.weight(1.4f)) {
                                 StatusChipsRow(currentStatus = model.status, isUpdating = isUpdatingStatus, onStatusSelected = onStatusSelected)
                                 ValueScaleSection(model = model, stats = stats)
                                 SourcesSection(
@@ -446,7 +454,7 @@ private fun ModelDetail(
                                     )
                                 }
                             }
-                            Column(modifier = Modifier.width(260.dp)) {
+                            Column(modifier = Modifier.weight(1f).widthIn(min = 200.dp, max = 280.dp)) {
                                 ToolsSection(onAddSourceClick = onAddSourceClick)
                                 FactsSection(model = model, categories = categories)
                                 if (model.status == "new") {
@@ -570,13 +578,20 @@ private fun HeroSection(model: Model) {
     }
 }
 
+// FlowRow (issue #18) i stallet for en horisontellt skrollbar Row -- pa breda
+// skarmar (Fold uppfalld) fick chipparna tidigare plats for de flesta men inte
+// alla alternativ, vilket sag ut som att raden klipptes av i kanten istallet
+// for att tydligt signalera att den gick att skrolla. Med FlowRow radbryts
+// chipparna istallet till en andra rad nar de inte far plats, likt beteendet
+// som redan anvands i telefonlaget.
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StatusChipsRow(currentStatus: String, isUpdating: Boolean, onStatusSelected: (String) -> Unit) {
     SectionLabel("STATUS")
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp, bottom = 4.dp),
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         STATUS_OPTIONS.forEach { (key, label) ->
             DetailPillChip(
@@ -592,28 +607,9 @@ private fun StatusChipsRow(currentStatus: String, isUpdating: Boolean, onStatusS
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailPillChip(selected: Boolean, label: String, enabled: Boolean = true, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        enabled = enabled,
-        onClick = onClick,
-        label = { Text(text = label.uppercase(), style = MaterialTheme.typography.labelMedium) },
-        shape = RoundedCornerShape(20.dp),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = Color.Transparent,
-            labelColor = TextMuted,
-            selectedContainerColor = AccentGold,
-            selectedLabelColor = AppBackground,
-        ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = enabled,
-            selected = selected,
-            borderColor = CardBorder,
-            selectedBorderColor = AccentGold,
-        ),
-    )
+    AppPillChip(selected = selected, label = label, enabled = enabled, onClick = onClick)
 }
 
 @Composable
@@ -783,11 +779,26 @@ private fun SourceRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            val context = LocalContext.current
             Row(verticalAlignment = Alignment.CenterVertically) {
                 flagForWarehouse(source.warehouse)?.let {
                     Text(text = it, modifier = Modifier.padding(end = 4.dp))
                 }
-                Text(text = source.source, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                Text(
+                    text = source.source,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (source.url.isNullOrBlank()) TextPrimary else AccentGoldLink,
+                    textDecoration = if (source.url.isNullOrBlank()) null else TextDecoration.Underline,
+                    modifier = if (source.url.isNullOrBlank()) {
+                        Modifier
+                    } else {
+                        Modifier.clickable {
+                            runCatching {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.url)))
+                            }
+                        }
+                    },
+                )
             }
             val stockText = when (source.inStock) {
                 1 -> "i lager"
@@ -917,13 +928,14 @@ private fun NotesDisplayRow(notes: String?) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BuildStatusSection(model: Model, isUpdating: Boolean, onSelect: (String?) -> Unit) {
     SectionLabel("BYGGSTATUS")
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 4.dp),
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BUILD_STATUS_OPTIONS.forEach { (key, label) ->
             DetailPillChip(
@@ -973,6 +985,31 @@ private fun OwnPhotoSection(
         }
     }
 
+    // Issue #18 (punkt 3) -- kameraalternativ bredvid galleri-väljaren ovan.
+    // pendingCameraUri hålls i väntan på launcherns callback (TakePicture
+    // skriver till en URI vi själva skapar i förväg, till skillnad från
+    // PickVisualMedia där systemet ger tillbaka en URI direkt) -- utan detta
+    // state vet callbacken inte vilken fil som faktiskt skrevs.
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { success ->
+        val uri = pendingCameraUri
+        if (success && uri != null) {
+            uriToMultipartPart(context.contentResolver, uri, "photo")?.let(onUpload)
+        }
+        pendingCameraUri = null
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            val uri = createCameraCaptureUri(context)
+            pendingCameraUri = uri
+            takePictureLauncher.launch(uri)
+        }
+    }
+
     SectionLabel("EGET FOTO")
     if (model.ownPhotoUrl != null) {
         Box(
@@ -1001,6 +1038,22 @@ private fun OwnPhotoSection(
             } else {
                 Text(if (model.ownPhotoUrl != null) "Byt foto" else "Ladda upp foto")
             }
+        }
+        TextButton(
+            onClick = {
+                val permissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (permissionGranted) {
+                    val uri = createCameraCaptureUri(context)
+                    pendingCameraUri = uri
+                    takePictureLauncher.launch(uri)
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                }
+            },
+            enabled = !isUploading,
+        ) {
+            Text("Ta foto")
         }
         if (model.ownPhotoUrl != null) {
             TextButton(onClick = onDeleteClick, enabled = !isDeleting) {

@@ -9,4 +9,8 @@
 -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-files-path name="update_downloads" path="Download/" />
+    <!-- Issue #18 (punkt 3): kamerafoto sparas tillfälligt i cacheDir/camera/
+         innan det skickas som multipart-uppladdning, se createCameraCaptureUri
+         i util/FileUpload.kt. -->
+    <cache-path name="camera_photos" path="camera/" />
 </paths>
