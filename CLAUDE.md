@@ -163,6 +163,32 @@ Fem separata, av användaren rapporterade punkter i samma issue, alla åtgärdad
 - **Punkt 5 (kompakt knappdesign)** — `DetailPillChip` (`ModelDetailScreen.kt`) och `PillFilterChip` (`ModelListScreen.kt`) var två separat underhållna men i praktiken identiska Material3-`FilterChip`-implementationer (samma `RoundedCornerShape(20.dp)`, samma färglogik) — `FilterChip` har en fast 32dp-höjd och en inte-konfigurerbar inbyggd padding som inte gick att krympa vidare via dess publika API. Båda ersatta med anrop till en ny delad `AppPillChip` (`ui/theme/Chips.kt`) — en egen `Box`+`clickable`-implementation med tightare padding (10dp/6dp mot chip-defaultens större mått), mindre hörnradie (14dp) och `labelSmall` (9sp) med reducerat bokstavsavstånd (0.4sp mot tidigare 0.8sp) istället för `labelMedium` (10sp) — samma färgspråk (guld vid val, `TextMuted`/`CardBorder` annars) bevarat oförändrat.
 - Byggverifiering: `./gradlew assembleDebug` — grön build. **Ingen emulator/fysisk enhet-körning denna session** (`adb devices` gav en tom lista, ingen AVD ansluten) — samma begränsning som flera tidigare Fas-jobb, se "Ej verifierat mot fysisk enhet" ovan. Fold 7-layoutfixen (punkt 2) och kamerabehörighetsflödet (punkt 3) är därför kompilerings- men INTE enhetsverifierade.
 
+## Fas 20 — Fraktkostnad (shipping-override) saknades helt i källformuläret (2026-08-02)
+
+Rapporterad av användaren efter Fas 19: när man redigerar en butik/källa för att ange den faktiska
+fraktkostnaden fanns inget fält för det alls i `SourceFormSheet` — till skillnad från leveranstid
+(Fas 19, redan korrekt) hade fraktkostnad aldrig implementerats i appen, trots att `Source.kt` redan
+modellerade `shippingSek`/`shippingSource`/`shippingOverrideAmount`/`shippingOverrideCurrency` (bara
+lästa, aldrig satta). Webb-UI:t har en egen dialog ("Faktisk fraktkostnad", `static/app.js`) mot
+`POST/DELETE /api/models/{id}/shipping-override[/<source>]` (`model_shipping_overrides`-tabellen,
+helt separat från både prisraden och source-overriden/leveranstid) — detta anrop saknades helt i
+`BrickRadarApi.kt`.
+
+- `model/SourceRequests.kt`: ny `ShippingOverrideRequest(source, amount, currency)`.
+- `network/BrickRadarApi.kt`: `setShippingOverride`/`deleteShippingOverride`, mirror av
+  `setSourceOverride`/`deleteSourceOverride`.
+- `repository/ModelRepository.kt`: `addSource`/`updateSource` tar nu även `shippingAmount`/
+  `shippingCurrency`; ny `applyShippingOverride` (samma "tomt fält tar bort en ev. tidigare
+  override"-princip som `applySourceOverride` för leveranstid — ett tredje, valfritt serveranrop
+  utöver prisraden och source-overriden).
+- `viewmodel/ModelDetailViewModel.kt`: `addSource`/`updateSource` trådar igenom de två nya fälten.
+- `ui/ModelDetailScreen.kt`: `SourceFormSheet` har nu en egen "Fraktkostnad"-sektion (valuta-chips +
+  belopp, samma mönster som Valuta/Pris) efter Leveranstid, förifylld från
+  `editingSource?.shippingOverrideAmount`/`shippingOverrideCurrency` vid redigering. Fältet är
+  valfritt (blankt → tar bort en ev. tidigare override, precis som leveranstid).
+- Byggverifiering: `./gradlew assembleDebug` — grön build. **Ingen emulator/fysisk enhet-körning
+  denna session.**
+
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
 - Detaljvy: full modellinfo + alla källor/priser

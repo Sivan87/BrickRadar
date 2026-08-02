@@ -281,12 +281,12 @@ fun ModelDetailScreen(
                         editingSource = null
                     }
                 },
-                onSubmit = { name, price, currency, url, inStock, warehouse, deliveryEstimate ->
+                onSubmit = { name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency ->
                     val target = editingSource
                     if (target == null) {
-                        viewModel.addSource(name, price, currency, url, inStock, warehouse, deliveryEstimate)
+                        viewModel.addSource(name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency)
                     } else {
-                        viewModel.updateSource(target.id, target.source, price, currency, url, inStock, warehouse, deliveryEstimate)
+                        viewModel.updateSource(target.id, target.source, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency)
                     }
                 },
             )
@@ -1643,6 +1643,8 @@ private fun SourceFormSheet(
         inStock: Boolean,
         warehouse: String?,
         deliveryEstimate: String?,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
     ) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1653,12 +1655,16 @@ private fun SourceFormSheet(
     var inStock by remember(editingSource) { mutableStateOf(editingSource?.inStock != 0) }
     var warehouse by remember(editingSource) { mutableStateOf(editingSource?.warehouse) }
     var deliveryEstimate by remember(editingSource) { mutableStateOf(editingSource?.deliveryEstimate ?: "") }
+    var shippingAmountText by remember(editingSource) { mutableStateOf(editingSource?.shippingOverrideAmount?.toString() ?: "") }
+    var shippingCurrency by remember(editingSource) { mutableStateOf(editingSource?.shippingOverrideCurrency ?: "SEK") }
 
     val price = priceText.toDoubleOrNull()
     val priceError = price == null || price <= 0
     val nameError = editingSource == null && sourceName.isBlank()
     val urlError = url.isBlank()
-    val canSave = !priceError && !nameError && !urlError && !isSaving
+    val shippingAmount = shippingAmountText.toDoubleOrNull()
+    val shippingError = shippingAmountText.isNotBlank() && (shippingAmount == null || shippingAmount < 0)
+    val canSave = !priceError && !nameError && !urlError && !shippingError && !isSaving
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = PanelBackground) {
         Column(
@@ -1748,6 +1754,29 @@ private fun SourceFormSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "Fraktkostnad", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CURRENCIES.forEach { c ->
+                    DetailPillChip(selected = shippingCurrency == c, label = c, onClick = { shippingCurrency = c })
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = shippingAmountText,
+                onValueChange = { shippingAmountText = it },
+                label = { Text("Fraktkostnad") },
+                placeholder = { Text("Lämna tomt om okänd") },
+                isError = shippingError,
+                supportingText = { if (shippingError) Text("Fraktkostnad måste vara ett tal ≥ 0") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = {
@@ -1756,6 +1785,7 @@ private fun SourceFormSheet(
                         onSubmit(
                             sourceName.trim(), currentPrice, currency, url.trim(), inStock,
                             warehouse, deliveryEstimate.trim().ifBlank { null },
+                            shippingAmount, if (shippingAmount != null) shippingCurrency else null,
                         )
                     }
                 },

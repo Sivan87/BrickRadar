@@ -29,3 +29,13 @@ data class SourceOverrideRequest(
     val warehouse: String?,
     @Json(name = "delivery_estimate") val deliveryEstimate: String?,
 )
+
+// POST/DELETE .../shipping-override — egen lagringsplats (model_shipping_overrides),
+// helt separat från source-override ovan (som bara har in_stock/warehouse/
+// delivery_estimate). Frakt kan alltså vara i en annan valuta än själva priset,
+// se webb-UI:ts egen "Faktisk fraktkostnad"-dialog (static/app.js).
+data class ShippingOverrideRequest(
+    val source: String,
+    val amount: Double,
+    val currency: String,
+)

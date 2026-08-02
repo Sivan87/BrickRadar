@@ -13,6 +13,7 @@ import com.sivan.brickradar.model.MissingPartsResponse
 import com.sivan.brickradar.model.OrderNumberUpdateRequest
 import com.sivan.brickradar.model.RebrickableSetNumUpdateRequest
 import com.sivan.brickradar.model.Receipt
+import com.sivan.brickradar.model.ShippingOverrideRequest
 import com.sivan.brickradar.model.SourceOverrideRequest
 import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
@@ -92,6 +93,12 @@ interface BrickRadarApi {
 
     @DELETE("api/models/{id}/source-override/{source}")
     suspend fun deleteSourceOverride(@Path("id") modelId: Int, @Path("source") source: String): ResponseBody
+
+    @POST("api/models/{id}/shipping-override")
+    suspend fun setShippingOverride(@Path("id") modelId: Int, @Body request: ShippingOverrideRequest): ResponseBody
+
+    @DELETE("api/models/{id}/shipping-override/{source}")
+    suspend fun deleteShippingOverride(@Path("id") modelId: Int, @Path("source") source: String): ResponseBody
 
     // --- Issue #17 (mirroring mould-king-tracker issue #5) ---------------
 

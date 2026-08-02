@@ -14,6 +14,7 @@ import com.sivan.brickradar.model.MissingPartsResponse
 import com.sivan.brickradar.model.OrderNumberUpdateRequest
 import com.sivan.brickradar.model.RebrickableSetNumUpdateRequest
 import com.sivan.brickradar.model.Receipt
+import com.sivan.brickradar.model.ShippingOverrideRequest
 import com.sivan.brickradar.model.SourceOverrideRequest
 import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
@@ -142,9 +143,12 @@ class ModelRepository(
         inStock: Int?,
         warehouse: String?,
         deliveryEstimate: String?,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
     ): ApiResult<Model> = safeCall {
         api.addSource(modelId, AddSourceRequest(source, price, currency, url, inStock, warehouse)).close()
         applySourceOverride(modelId, source, inStock, warehouse, deliveryEstimate)
+        applyShippingOverride(modelId, source, shippingAmount, shippingCurrency)
         api.getModel(modelId)
     }
 
@@ -158,9 +162,12 @@ class ModelRepository(
         inStock: Int?,
         warehouse: String?,
         deliveryEstimate: String?,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
     ): ApiResult<Model> = safeCall {
         api.updateSource(sourceId, UpdateSourceRequest(price, currency, url, inStock, warehouse)).close()
         applySourceOverride(modelId, sourceName, inStock, warehouse, deliveryEstimate)
+        applyShippingOverride(modelId, sourceName, shippingAmount, shippingCurrency)
         api.getModel(modelId)
     }
 
@@ -182,6 +189,23 @@ class ModelRepository(
             api.deleteSourceOverride(modelId, source).close()
         } else {
             api.setSourceOverride(modelId, SourceOverrideRequest(source, inStock, warehouse, deliveryEstimate)).close()
+        }
+    }
+
+    // Fraktkostnad (shipping_sek/shipping_override_*) ligger i en helt egen
+    // tabell (model_shipping_overrides) från både prisraden OCH source-overriden
+    // ovan — samma "tomt fält tar bort en ev. tidigare override"-princip som
+    // leveranstid, se applySourceOverride.
+    private suspend fun applyShippingOverride(
+        modelId: Int,
+        source: String,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
+    ) {
+        if (shippingAmount == null) {
+            api.deleteShippingOverride(modelId, source).close()
+        } else {
+            api.setShippingOverride(modelId, ShippingOverrideRequest(source, shippingAmount, shippingCurrency ?: "SEK")).close()
         }
     }
 

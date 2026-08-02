@@ -202,6 +202,8 @@ class ModelDetailViewModel @JvmOverloads constructor(
         inStock: Boolean,
         warehouse: String?,
         deliveryEstimate: String?,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
     ) {
         val current = _uiState.value
         if (current !is ModelDetailUiState.Loaded || current.isSavingSource) return
@@ -212,6 +214,7 @@ class ModelDetailViewModel @JvmOverloads constructor(
             val result = repository.addSource(
                 modelId, source, price, currency, url,
                 if (inStock) 1 else 0, warehouse, deliveryEstimate,
+                shippingAmount, shippingCurrency,
             )
             when (result) {
                 is ApiResult.Success -> {
@@ -235,6 +238,8 @@ class ModelDetailViewModel @JvmOverloads constructor(
         inStock: Boolean,
         warehouse: String?,
         deliveryEstimate: String?,
+        shippingAmount: Double?,
+        shippingCurrency: String?,
     ) {
         val current = _uiState.value
         if (current !is ModelDetailUiState.Loaded || current.isSavingSource) return
@@ -245,6 +250,7 @@ class ModelDetailViewModel @JvmOverloads constructor(
             val result = repository.updateSource(
                 modelId, sourceId, sourceName, price, currency, url,
                 if (inStock) 1 else 0, warehouse, deliveryEstimate,
+                shippingAmount, shippingCurrency,
             )
             when (result) {
                 is ApiResult.Success -> {
