@@ -18,6 +18,13 @@ val apiBaseUrl = project.findProperty("API_BASE_URL") as String?
 val apiKey = project.findProperty("API_KEY") as String?
     ?: throw GradleException("API_KEY saknas - se CLAUDE.md \"Serverkonfiguration\"")
 
+// Lokal LAN-fallback (issue #19 i Sivan87/BrickRadar) - till skillnad från API_BASE_URL/
+// API_KEY ovan kastar den INTE ett fel om den saknas: adressen är en privat LAN-IP (ingen
+// hemlighet, oåtkomlig utanför hemmanätverket) med ett känt, stabilt default-värde, så varken
+// lokala byggen eller CI (release.yml, ingen ny secret) behöver sätta den explicit.
+val apiBaseUrlLocal = project.findProperty("API_BASE_URL_LOCAL") as String?
+    ?: "http://192.168.1.142:5000"
+
 // version.properties är den enda källan till sanning för versionCode/versionName
 // (se CLAUDE.md, "Release build") — höjs automatiskt här vid assembleRelease
 // istället för att redigeras manuellt.
@@ -69,6 +76,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("String", "API_BASE_URL_LOCAL", "\"$apiBaseUrlLocal\"")
         buildConfigField("String", "API_KEY", "\"$apiKey\"")
     }
 

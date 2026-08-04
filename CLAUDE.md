@@ -3,12 +3,13 @@
 Native Android-app (Kotlin/Compose) mot BrickRadar Flask-API:t (`C:\mould-king-tracker`), som redan har full funktionsparitet med webb-UI:t under `/api/` (se `fas1-brickradar-json-api.md` i det projektet).
 
 ## Serverkonfiguration
-- `app/src/main/java/com/sivan/brickradar/network/ApiConfig.kt` läser `BASE_URL`/`API_KEY` från `BuildConfig.API_BASE_URL`/`BuildConfig.API_KEY` — **inte längre hårdkodat i källkoden** (ändrat 2026-07-28, se issue #2 i Sivan87/BrickRadar). Den ursprungliga hårdkodade nyckeln (beslut 2026-07-27, dokumenterat här som "avsiktligt") visade sig sitta kvar oroterad i git-historiken sedan initial-commiten — en secrets-scan av repot hittade den, den roterades, och lagringen flyttades till `BuildConfig` för att undvika samma problem igen.
-- De faktiska värdena kommer från `app/build.gradle.kts`s `buildConfigField(...)`, som i sin tur läser Gradle-properties `API_BASE_URL`/`API_KEY` via `project.findProperty(...)` — **exakt samma mönster som `RELEASE_STORE_PASSWORD` m.fl.** (se "Release build" nedan). Saknas någon av dem kastar Gradle-buildet ett tydligt fel istället för att tyst falla tillbaka på ett gammalt/hårdkodat värde.
-  - **Lokalt:** lägg `API_BASE_URL=http\://<lan-ip>\:5000/` och `API_KEY=<nyckeln>` i root-projektets `gradle.properties` (gitignorad, samma fil som keystore-lösenorden — fylls i manuellt, skickas aldrig genom chatten). Kolonteckenet i URL:en behöver `\:`-escapas i properties-filsyntax.
-  - **I CI** (`.github/workflows/release.yml`): skickas som `-PAPI_BASE_URL="${{ secrets.API_BASE_URL }}" -PAPI_KEY="${{ secrets.API_KEY }}"` till `assembleRelease`, satta som repo-secrets i Sivan87/BrickRadar (samma mönster som `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD` m.fl.).
-- Flyttar/byter servern IP: uppdatera `API_BASE_URL` i `gradle.properties` (lokalt) och/eller repo-secreten `API_BASE_URL` (CI) OCH IP-adressen/domänen i `app/src/main/res/xml/network_security_config.xml` (cleartext HTTP är annars blockerat av Android sedan API 28).
-- **Sedan 2026-07-30 (issue #14) pekar `API_BASE_URL` mot Tailscale MagicDNS-adressen `http://tower.tail38b3cd.ts.net:5000/` istället för LAN-IP:t `192.168.1.30`** — se Fas 18 nedan.
+- `app/src/main/java/com/sivan/brickradar/network/ApiConfig.kt` läser `TAILSCALE_URL`/`LOCAL_URL`/`API_KEY` från `BuildConfig.API_BASE_URL`/`BuildConfig.API_BASE_URL_LOCAL`/`BuildConfig.API_KEY` — **inte längre hårdkodat i källkoden** (ändrat 2026-07-28, se issue #2 i Sivan87/BrickRadar). Den ursprungliga hårdkodade nyckeln (beslut 2026-07-27, dokumenterat här som "avsiktligt") visade sig sitta kvar oroterad i git-historiken sedan initial-commiten — en secrets-scan av repot hittade den, den roterades, och lagringen flyttades till `BuildConfig` för att undvika samma problem igen.
+- De faktiska värdena kommer från `app/build.gradle.kts`s `buildConfigField(...)`, som i sin tur läser Gradle-properties `API_BASE_URL`/`API_BASE_URL_LOCAL`/`API_KEY` via `project.findProperty(...)` — **exakt samma mönster som `RELEASE_STORE_PASSWORD` m.fl.** (se "Release build" nedan). Saknas `API_BASE_URL`/`API_KEY` kastar Gradle-buildet ett tydligt fel istället för att tyst falla tillbaka på ett gammalt/hårdkodat värde — `API_BASE_URL_LOCAL` är undantaget (se nedan, Fas 21).
+  - **Lokalt:** lägg `API_BASE_URL=http\://<tailscale-adress>\:5000/`, `API_BASE_URL_LOCAL=http\://<lan-ip>\:5000/` och `API_KEY=<nyckeln>` i root-projektets `gradle.properties` (gitignorad, samma fil som keystore-lösenorden — fylls i manuellt, skickas aldrig genom chatten). Kolonteckenet i URL:en behöver `\:`-escapas i properties-filsyntax.
+  - **I CI** (`.github/workflows/release.yml`): `API_BASE_URL`/`API_KEY` skickas som `-PAPI_BASE_URL="${{ secrets.API_BASE_URL }}" -PAPI_KEY="${{ secrets.API_KEY }}"` till `assembleRelease`, satta som repo-secrets i Sivan87/BrickRadar (samma mönster som `KEYSTORE_BASE64`/`KEYSTORE_PASSWORD` m.fl.). `API_BASE_URL_LOCAL` skickas INTE med i CI — den faller tillbaka på sitt gradle.kts-default (se Fas 21), ingen ny secret behövde läggas till.
+- Flyttar/byter Tailscale-adressen eller hemma-IP:t: uppdatera `API_BASE_URL`/`API_BASE_URL_LOCAL` i `gradle.properties` (lokalt) och/eller repo-secreten `API_BASE_URL` (CI, LOCAL-varianten har inte en egen secret, se ovan) OCH domänen/IP-adressen i `app/src/main/res/xml/network_security_config.xml` (cleartext HTTP är annars blockerat av Android sedan API 28).
+- **Sedan 2026-07-30 (issue #14) pekar `API_BASE_URL` mot Tailscale MagicDNS-adressen `http://tower.tail38b3cd.ts.net:5000/`** — se Fas 18 nedan.
+- **Sedan 2026-08-04 (issue #19) racear appen `API_BASE_URL` (Tailscale) mot `API_BASE_URL_LOCAL` (statisk hemma-IP, default `http://192.168.1.142:5000`) vid varje appsession istället för att bara peka mot en enda hårdkodad adress** — se Fas 21 nedan för hela mekanismen (`network/BackendResolver.kt`).
 - Roterar API-nyckeln: uppdatera `API_KEY` i `mould-king-tracker/.env` OCH i `gradle.properties`/repo-secreten här samtidigt — de måste vara identiska, servern har bara EN giltig nyckel åt gången.
 
 ## Arkitektur (Fas 2 — grundskelett, utökad i Fas 3, Fas 4, Fas 6 och Fas 7)
@@ -188,6 +189,97 @@ helt separat från både prisraden och source-overriden/leveranstid) — detta a
   valfritt (blankt → tar bort en ev. tidigare override, precis som leveranstid).
 - Byggverifiering: `./gradlew assembleDebug` — grön build. **Ingen emulator/fysisk enhet-körning
   denna session.**
+
+## Fas 21 — Backend-anslutning: race mellan Tailscale och lokal IP (issue #19, 2026-08-04)
+
+Fas 18 bytte `API_BASE_URL` från LAN-IP till Tailscale MagicDNS för att nå backend utifrån —
+men Tailscale-appen kräver internetuppkoppling/körande VPN-tjänst, så en telefon hemma på
+vanligt WiFi utan Tailscale igång kunde inte nå backend alls, trots att den var direkt nåbar
+lokalt. Lösningen racear en lättviktig hälsokontroll mot båda adresserna samtidigt och
+använder den som svarar snabbast, istället för att välja en enda hårdkodad adress.
+
+- **Ny gradle-property `API_BASE_URL_LOCAL`** (`app/build.gradle.kts`) — till skillnad från
+  `API_BASE_URL`/`API_KEY` kastar den INTE ett Gradle-fel om den saknas: adressen är en
+  privat LAN-IP (`192.168.1.142:5000`, angiven som statisk/oföränderlig i issuen), ingen
+  hemlighet, med ett känt default-värde inbakat direkt i build-scriptet. Varken lokal
+  `gradle.properties` eller CI-secrets (`release.yml`) behövde uppdateras för att detta ska
+  fungera i alla byggen, men `gradle.properties` fick ändå en explicit rad för konsekvens
+  med `API_BASE_URL`/`API_KEY` (se "Serverkonfiguration" ovan).
+- **`network/BackendResolver.kt`** (nytt) — racear `ApiConfig.TAILSCALE_URL`/`LOCAL_URL` mot
+  varandra: en GET mot `.../api/categories` (lättaste befintliga endpoint, ingen ny
+  backend-route behövdes) med en egen, kort `OkHttpClient` (1500 ms connect+read-timeout,
+  oberoende av appens vanliga klient — en "död" adress ska inte kunna hänga racet). Statuskod
+  spelar ingen roll (även 401/404 bevisar att värden svarar på HTTP); bara nätverksfel
+  (`IOException`, t.ex. `UnknownHostException`/connection refused/timeout) räknas som att en
+  kandidat förlorar. Använder `kotlinx.coroutines.selects.select` för en RIKTIG race — den
+  första kandidaten vars hälsokontroll faktiskt lyckas vinner, men om den snabbaste
+  kandidaten failar väntas nästa in istället för att ge upp direkt (täcker "båda aktiva
+  samtidigt"-fallet lika väl som "bara den ena uppe"-fallen). Vinnaren cachas
+  (`@Volatile`+`Mutex`) för resten av appsessionen — `ensureResolved()` är en billig
+  cache-läsning efter första lyckade racet, ingen ny nätverksrace per API-anrop.
+- **`repository/ModelRepository.kt`: `safeCall`** anropar nu `BackendResolver.ensureResolved()`
+  innan varje anrop (utom `getAppVersion()`, som pratar med GitHub, inte vår server — ny
+  `resolveBackend`-parameter, default `true`, satt till `false` där för att inte trigga en
+  onödig race innan en ren GitHub-koll). Vid en `IOException` mot den redan cachade adressen
+  (t.ex. telefonen bytte nätverk mitt i sessionen) racear `safeCall` om en gång
+  (`BackendResolver.resolve(force = true)`) och gör om SAMMA anrop innan den ger upp — annars
+  hade appen fastnat på en adress som slutat svara tills den startades om. Felmeddelandet vid
+  totalt nätverksfel omnämner nu båda adresserna ("kontrollera Tailscale eller att telefonen
+  är på hemma-WiFi") istället för bara "samma WiFi".
+- **`network/RetrofitClient.kt`** — ny `dynamicBaseUrlInterceptor` skriver om schema/host/port
+  på varje utgående request till `BackendResolver.currentBaseUrl()`. Retrofits egen
+  `baseUrl(...)` sätts bara en gång vid appstart och går inte att byta efteråt utan att bygga
+  om hela Retrofit-instansen — interceptorn är hur adressvalet faktiskt blir dynamiskt per
+  request utan den kostnaden. `ApiConfig.BASE_URL` (används av `authenticatedUrl` för Coil-
+  bilder/kvittovisning) är av samma skäl en `get()`-property mot `BackendResolver` istället
+  för ett statiskt `val` sedan denna Fas.
+- **`app/src/main/res/xml/network_security_config.xml`**: `192.168.1.142` tillagd som en andra
+  `<domain>` i samma `cleartextTrafficPermitted="true"`-block som Tailscale-domänen (annars
+  blockerar Android okrypterad HTTP mot LAN-IP:t, samma anledning som Fas 18:s ändring).
+- **Medvetet INTE ändrat:** adressvalet är fortsatt hårdkodat/ej UI-konfigurerbart (samma
+  avsiktliga designbeslut som tidigare, se "INTE implementerat än" — bara VILKEN av de två
+  hårdkodade adresserna som används blev smartare, inte OM den går att ändra i appen).
+- Byggverifiering: `./gradlew assembleDebug` — grön build (inkl. efter en refaktorering som
+  tog bort en `ExperimentalCoroutinesApi`-varning, `Deferred.getCompleted()` bytt mot att
+  fånga vinnarens värde direkt i `select`-klausulen).
+- **VERIFIERAT live mot en emulator denna session** (Android Studio var installerat men hade
+  ingen AVD/systemavbild sedan tidigare — `cmdline-tools`/`platform-tools`/en `android-34`
+  `google_apis`/x86_64-avbild laddades ner och en headless AVD (`brickradar_test`) skapades
+  och startades för detta jobb):
+  - **Lokal-IP-fallback med Tailscale nere** (checklistans punkt 2) verifierat mot den RIKTIGA
+    produktionsservern: från denna dev-maskin var `tower.tail38b3cd.ts.net` faktiskt onåbar
+    (`curl` gav anslutningsfel — Tailscale-klienten är inte ens installerad på maskinen) medan
+    `192.168.1.142:5000` svarade (401, servern är uppe men API-nyckeln i lokal
+    `gradle.properties` matchar inte serverns nuvarande nyckel — ett förbefintligt,
+    orelaterat konfigurationsläge, inte en bugg i denna Fas). `adb logcat` bekräftade att
+    ALLA tre startanropen (`/api/stats`, `/api/models`, `/api/categories`) gick till
+    `192.168.1.142:5000`, aldrig mot Tailscale-adressen — racet valde alltså korrekt den enda
+    faktiskt nåbara adressen. Appen kraschade INTE på 401:orna, visade istället den befintliga
+    "Ogiltig eller saknad API-nyckel"-felvyn med "Försök igen" (verifierat via skärmdump).
+  - **"Båda aktiva, snabbast vinner" och "ingen adress svarar"** (checklistans punkt 3 och 4)
+    verifierade mot två egna lokala Python-testservrar (`10.0.2.2:8091`/`8092` från
+    emulatorns håll, en `snabb`/en 4-sekunders-fördröjd `långsam` — `gradle.properties`/
+    `network_security_config.xml` tillfälligt omdirigerade till dessa, återställda till de
+    riktiga värdena direkt efteråt). Racet valde den snabba servern på under en sekund
+    OBEROENDE av vilket fält (`API_BASE_URL`/`API_BASE_URL_LOCAL`) den låg i — testat i båda
+    riktningarna, ingen inbyggd bias mot vare sig Tailscale- eller lokal-fältet. Med båda
+    adresserna pekande mot stängda portar (ingen server alls) visade appen samma tydliga
+    felmeddelande ("Kunde inte nå servern — kontrollera Tailscale eller att telefonen är på
+    hemma-WiFi") efter `safeCall`s enda omracing-försök — INGEN krasch, INGEN permanent
+    hängning (total väntetid några tiotal sekunder p.g.a. dubbla anropsförsök × OkHttps
+    default-timeout, men appen förblev responsiv hela tiden, uppdateringsdialogen visades
+    direkt som vanligt).
+  - **Checklistans punkt 1** (Tailscale nåbar, utanför hemmanätverket) kunde INTE verifieras
+    direkt — dev-maskinen har ingen Tailscale-installation eller möjlighet att simulera "utanför
+    hemmanätverket". Ovanstående snabb/långsam-test (racet är symmetriskt, ingen fältbias)
+    ger dock stark indirekt evidens: samma mekanism som bevisat väljer rätt nåbara adress i de
+    andra tre fallen har ingen särskild kod-väg för just Tailscale-fältet.
+  - En bugg hittades och fixades UNDER denna verifiering, i TESTUPPSTÄLLNINGEN (inte i
+    produktionskoden): de första testservar-svaren för `/api/stats`/`/api/categories` var
+    JSON-arrayer istället för objekt, vilket gav en okatchad `Moshi.JsonDataException` och en
+    riktig appkrasch — men bara för att testservern returnerade fel JSON-form, inte p.g.a.
+    `BackendResolver`/`RetrofitClient`. Rättat i testservern (matchande `{}`/`{"categories":[]}`-
+    former), ingen ändring i appens produktionskod behövdes eller gjordes för detta.
 
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy

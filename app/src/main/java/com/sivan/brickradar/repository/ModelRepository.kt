@@ -20,6 +20,7 @@ import com.sivan.brickradar.model.StatsResponse
 import com.sivan.brickradar.model.StatusUpdateRequest
 import com.sivan.brickradar.model.ToggleMissingPartFoundRequest
 import com.sivan.brickradar.model.UpdateSourceRequest
+import com.sivan.brickradar.network.BackendResolver
 import com.sivan.brickradar.network.BrickRadarApi
 import com.sivan.brickradar.network.GitHubReleasesApi
 import com.sivan.brickradar.network.RetrofitClient
@@ -59,7 +60,10 @@ class ModelRepository(
     // appanvändning om GitHub inte är nåbart) hanteras av ANROPAREN
     // (UpdateViewModel ignorerar ApiResult.Error helt) — safeCall/ApiResult
     // är samma väg som resten av repositoryt, ingen särbehandling behövs här.
-    suspend fun getAppVersion(): ApiResult<AppVersionResponse> = safeCall {
+    // resolveBackend = false: detta anrop rör bara GitHub (githubApi), aldrig vår egen
+    // server, så det ska varken vänta in eller trigga BackendResolvers Tailscale/LAN-race
+    // (se safeCall nedan och issue #19).
+    suspend fun getAppVersion(): ApiResult<AppVersionResponse> = safeCall(resolveBackend = false) {
         val release = githubApi.getLatestRelease()
         val versionName = release.tagName.removePrefix("v")
         // Samma tolkning som backendens tidigare _fetch_latest_github_release/
@@ -279,29 +283,48 @@ class ModelRepository(
         api.getReceipts(id)
     }
 
-    private suspend inline fun <T> safeCall(crossinline block: suspend () -> T): ApiResult<T> {
+    // BackendResolver.ensureResolved() racear Tailscale-adressen mot den lokala hemma-IP:n
+    // (issue #19 i Sivan87/BrickRadar) bara vid det allra första anropet i sessionen -
+    // därefter är den ett omedelbart cache-svar, ingen omracing per anrop. Om den redan
+    // valda adressen plötsligt slutar svara (IOException, t.ex. telefonen bytte nätverk
+    // mitt i sessionen) racear vi om en gång och gör om anropet innan vi ger upp.
+    private suspend inline fun <T> safeCall(resolveBackend: Boolean = true, crossinline block: suspend () -> T): ApiResult<T> {
+        if (resolveBackend) BackendResolver.ensureResolved()
         return try {
             ApiResult.Success(block())
         } catch (e: HttpException) {
-            val message = when (e.code()) {
-                400 -> parseErrorMessage(e) ?: "Ogiltig data"
-                401 -> "Ogiltig eller saknad API-nyckel"
-                404 -> "Hittades inte"
-                // 409: db.find_duplicate_model (api_add_model) — modellnummer+märke
-                // matchar en befintlig modell. Servern inkluderar existing_model_id
-                // i svaret men appen navigerar inte dit automatiskt (utanför scope
-                // för Fas 6 — enbart manuell inmatning, ingen dubblettnavigering än).
-                409 -> parseErrorMessage(e) ?: "Modellen finns redan"
-                // 502/503: missing-parts/sync (Rebrickable-fel/inte konfigurerad,
-                // se api.py: api_sync_missing_parts) — servern skickar alltid ett
-                // specifikt {"error": "..."} för dessa, samma som 400/409 ovan.
-                502, 503 -> parseErrorMessage(e) ?: "Serverfel (${e.code()})"
-                else -> "Serverfel (${e.code()})"
-            }
-            ApiResult.Error(message)
+            ApiResult.Error(httpErrorMessage(e))
         } catch (e: IOException) {
-            ApiResult.Error("Kunde inte nå servern — kontrollera att telefonen är på samma WiFi")
+            if (!resolveBackend) {
+                return ApiResult.Error("Kunde inte nå GitHub")
+            }
+            // Den cachade adressen floppade plötsligt (t.ex. telefonen bytte nätverk mitt i
+            // sessionen) - racea om en gång och gör om samma anrop innan vi ger upp.
+            BackendResolver.resolve(force = true)
+            try {
+                ApiResult.Success(block())
+            } catch (e2: HttpException) {
+                ApiResult.Error(httpErrorMessage(e2))
+            } catch (e2: IOException) {
+                ApiResult.Error("Kunde inte nå servern — kontrollera Tailscale eller att telefonen är på hemma-WiFi")
+            }
         }
+    }
+
+    private fun httpErrorMessage(e: HttpException): String = when (e.code()) {
+        400 -> parseErrorMessage(e) ?: "Ogiltig data"
+        401 -> "Ogiltig eller saknad API-nyckel"
+        404 -> "Hittades inte"
+        // 409: db.find_duplicate_model (api_add_model) — modellnummer+märke
+        // matchar en befintlig modell. Servern inkluderar existing_model_id
+        // i svaret men appen navigerar inte dit automatiskt (utanför scope
+        // för Fas 6 — enbart manuell inmatning, ingen dubblettnavigering än).
+        409 -> parseErrorMessage(e) ?: "Modellen finns redan"
+        // 502/503: missing-parts/sync (Rebrickable-fel/inte konfigurerad,
+        // se api.py: api_sync_missing_parts) — servern skickar alltid ett
+        // specifikt {"error": "..."} för dessa, samma som 400/409 ovan.
+        502, 503 -> parseErrorMessage(e) ?: "Serverfel (${e.code()})"
+        else -> "Serverfel (${e.code()})"
     }
 
     private fun parseErrorMessage(e: HttpException): String? {

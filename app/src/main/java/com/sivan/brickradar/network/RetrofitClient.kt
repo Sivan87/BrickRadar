@@ -2,6 +2,7 @@ package com.sivan.brickradar.network
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -16,11 +17,28 @@ object RetrofitClient {
         chain.proceed(request)
     }
 
+    // Skriver om schema/host/port på varje request till den adress BackendResolver senast
+    // racade fram (se den filen och issue #19 i Sivan87/BrickRadar). Retrofits egen
+    // baseUrl(...) nedan sätts bara en gång vid appstart och går inte att byta efteråt utan
+    // att bygga om hela Retrofit-instansen - den här interceptorn är hur adressvalet
+    // faktiskt blir dynamiskt per request istället.
+    private val dynamicBaseUrlInterceptor = Interceptor { chain ->
+        val original = chain.request()
+        val target = BackendResolver.currentBaseUrl().toHttpUrl()
+        val newUrl = original.url.newBuilder()
+            .scheme(target.scheme)
+            .host(target.host)
+            .port(target.port)
+            .build()
+        chain.proceed(original.newBuilder().url(newUrl).build())
+    }
+
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BASIC
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(dynamicBaseUrlInterceptor)
         .addInterceptor(apiKeyInterceptor)
         .addInterceptor(loggingInterceptor)
         .build()
@@ -36,8 +54,11 @@ object RetrofitClient {
         .add(KotlinJsonAdapterFactory())
         .build()
 
+    // Placeholder-baseUrl - dynamicBaseUrlInterceptor ovan skriver alltid om schema/host/
+    // port till den racade adressen innan requesten faktiskt skickas, så denna används bara
+    // för Retrofits egen path-uppbyggnad, aldrig som den slutgiltiga anropsadressen.
     val api: BrickRadarApi = Retrofit.Builder()
-        .baseUrl(ApiConfig.BASE_URL)
+        .baseUrl(ApiConfig.TAILSCALE_URL)
         .client(okHttpClient)
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
