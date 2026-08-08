@@ -94,6 +94,14 @@ data class Source(
     // Frånvaro betyder "kunde inte avgöras", vilket i UI:t ska visas som
     // "inte flaggad" precis som false.
     val suspicious: Boolean = false,
+    // DB-kolumnen är "INTEGER NOT NULL DEFAULT 0", speglar dict(row) från
+    // sqlite3.Row rakt av (samma mönster som in_stock/is_manual) — INTE en
+    // JSON-boolean, till skillnad från in_stock_override/warehouse_override
+    // (som är riktiga Python-booleans satta av api.py). Ett manuellt låst pris
+    // skrivs inte över av nästa skrapning, se mould-king-tracker-issuen om
+    // "Manuellt justerade priser skrivs över vid nästa sync".
+    @Json(name = "price_locked") val priceLocked: Int = 0,
 ) {
     val isManualEntry: Boolean get() = isManual != 0
+    val isPriceLocked: Boolean get() = priceLocked != 0
 }

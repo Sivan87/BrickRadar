@@ -9,6 +9,7 @@ data class AddSourceRequest(
     val url: String,
     @Json(name = "in_stock") val inStock: Int?,
     val warehouse: String?,
+    val locked: Boolean = false,
 )
 
 data class UpdateSourceRequest(
@@ -17,6 +18,7 @@ data class UpdateSourceRequest(
     val url: String,
     @Json(name = "in_stock") val inStock: Int?,
     val warehouse: String?,
+    val locked: Boolean,
 )
 
 // POST/DELETE .../source-override — separat lagringsplats (model_source_overrides

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -281,12 +282,12 @@ fun ModelDetailScreen(
                         editingSource = null
                     }
                 },
-                onSubmit = { name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency ->
+                onSubmit = { name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency, locked ->
                     val target = editingSource
                     if (target == null) {
-                        viewModel.addSource(name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency)
+                        viewModel.addSource(name, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency, locked)
                     } else {
-                        viewModel.updateSource(target.id, target.source, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency)
+                        viewModel.updateSource(target.id, target.source, price, currency, url, inStock, warehouse, deliveryEstimate, shippingAmount, shippingCurrency, locked)
                     }
                 },
             )
@@ -799,6 +800,14 @@ private fun SourceRow(
                         }
                     },
                 )
+                if (source.isPriceLocked) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Pris låst — skrivs inte över av nästa sync",
+                        tint = AccentGold,
+                        modifier = Modifier.padding(start = 4.dp).size(14.dp),
+                    )
+                }
             }
             val stockText = when (source.inStock) {
                 1 -> "i lager"
@@ -1645,6 +1654,7 @@ private fun SourceFormSheet(
         deliveryEstimate: String?,
         shippingAmount: Double?,
         shippingCurrency: String?,
+        locked: Boolean,
     ) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1654,6 +1664,7 @@ private fun SourceFormSheet(
     var url by remember(editingSource) { mutableStateOf(editingSource?.url ?: "") }
     var inStock by remember(editingSource) { mutableStateOf(editingSource?.inStock != 0) }
     var warehouse by remember(editingSource) { mutableStateOf(editingSource?.warehouse) }
+    var locked by remember(editingSource) { mutableStateOf(editingSource?.isPriceLocked ?: false) }
     var deliveryEstimate by remember(editingSource) { mutableStateOf(editingSource?.deliveryEstimate ?: "") }
     var shippingAmountText by remember(editingSource) { mutableStateOf(editingSource?.shippingOverrideAmount?.toString() ?: "") }
     var shippingCurrency by remember(editingSource) { mutableStateOf(editingSource?.shippingOverrideCurrency ?: "SEK") }
@@ -1731,6 +1742,15 @@ private fun SourceFormSheet(
                 Switch(checked = inStock, onCheckedChange = { inStock = it })
             }
             Spacer(modifier = Modifier.height(16.dp))
+            // Ett manuellt låst pris skrivs inte över av nästa automatiska sync
+            // (se Source.priceLocked/price_locked-kolumnen i mould-king-tracker) —
+            // låsstatusen sätts/tas bort i samma formulär som resten av källan,
+            // precis som webb-UI:ts motsvarande "Lås priset"-kryssruta.
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(text = "🔒 Lås pris (skrivs inte över av nästa sync)", style = MaterialTheme.typography.titleSmall, color = TextPrimary, modifier = Modifier.weight(1f))
+                Switch(checked = locked, onCheckedChange = { locked = it })
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Text(text = "Lagerland", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -1786,6 +1806,7 @@ private fun SourceFormSheet(
                             sourceName.trim(), currentPrice, currency, url.trim(), inStock,
                             warehouse, deliveryEstimate.trim().ifBlank { null },
                             shippingAmount, if (shippingAmount != null) shippingCurrency else null,
+                            locked,
                         )
                     }
                 },

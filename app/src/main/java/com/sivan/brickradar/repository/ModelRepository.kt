@@ -149,8 +149,9 @@ class ModelRepository(
         deliveryEstimate: String?,
         shippingAmount: Double?,
         shippingCurrency: String?,
+        locked: Boolean,
     ): ApiResult<Model> = safeCall {
-        api.addSource(modelId, AddSourceRequest(source, price, currency, url, inStock, warehouse)).close()
+        api.addSource(modelId, AddSourceRequest(source, price, currency, url, inStock, warehouse, locked)).close()
         applySourceOverride(modelId, source, inStock, warehouse, deliveryEstimate)
         applyShippingOverride(modelId, source, shippingAmount, shippingCurrency)
         api.getModel(modelId)
@@ -168,8 +169,9 @@ class ModelRepository(
         deliveryEstimate: String?,
         shippingAmount: Double?,
         shippingCurrency: String?,
+        locked: Boolean,
     ): ApiResult<Model> = safeCall {
-        api.updateSource(sourceId, UpdateSourceRequest(price, currency, url, inStock, warehouse)).close()
+        api.updateSource(sourceId, UpdateSourceRequest(price, currency, url, inStock, warehouse, locked)).close()
         applySourceOverride(modelId, sourceName, inStock, warehouse, deliveryEstimate)
         applyShippingOverride(modelId, sourceName, shippingAmount, shippingCurrency)
         api.getModel(modelId)
