@@ -367,3 +367,10 @@ redan är det.
   secreten `KEYSTORE_BASE64`) återanvändas, aldrig en nygenererad.
 - En push till `main` triggar workflowet oavsett vilken fil som ändrades (ingen
   path-filtrering) — precis som kickoff-specen (Del C) anger.
+
+## Unraid-server (referens/backup, appen körs inte här)
+- SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net`
+- SSH via lokal IP (fast/statisk): `ssh root@192.168.1.142`
+- Repot finns speglat på servern under `/mnt/user/appdata/BrickRadar` enbart som referens/backup — byggs och körs ALDRIG där (Android-utveckling kräver Android Studio/Gradle, inte en NAS-miljö).
+- Git-autentisering på servern: deploy key (read-only), SSH-alias `github.com-apk` i serverns `~/.ssh/config`, pekar på `~/.ssh/deploy_brickradar_apk`. Remote-URL: `git@github.com-apk:Sivan87/BrickRadar.git`.
+- Systerrepot `mould-king-tracker` (backend, körs live på servern via Docker) har motsvarande setup med SSH-alias `github.com-mkt` och sitt eget CLAUDE.md.
