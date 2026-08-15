@@ -381,6 +381,13 @@ ersatt av denna CachyOS-maskin; en andra (sekundär) Windows-dator finns dock kv
 fortfarande — Android-releasebygget (`assembleRelease`, se "Release build" ovan) sker fortsatt där
 tills en motsvarande Android Studio/Gradle-uppsättning finns bekräftad på CachyOS-maskinen.
 
+**Sandbox-notis:** SSH mot Unraid-servern via lokal IP (192.168.1.142) fungerar INTE genom sandboxens
+nätverksproxy, även om domänen är listad i allowedDomains — sandboxar blockerar som standard privata
+IP-intervall (192.168.0.0/16 m.fl.) oavsett vitlistning. Tailscale-aliaset (`unraid-ts`) skulle
+troligen fungera eftersom det är ett riktigt domännamn, men Tailscale är medvetet inte installerat på
+denna maskin. Kör därför alltid SSH/deploy-kommandon mot Unraid manuellt utanför sandboxen (ge
+kommandot till användaren att köra själv), försök inte routa dem genom sandbox-proxyn.
+
 ## Unraid-server (referens/backup, appen körs inte här)
 - SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net` (eller `ssh unraid-ts`, se "Utvecklingsmiljö" ovan)
 - SSH via lokal IP (fast/statisk): `ssh root@192.168.1.142` (eller `ssh unraid`, se "Utvecklingsmiljö" ovan)
