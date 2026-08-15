@@ -368,9 +368,22 @@ redan är det.
 - En push till `main` triggar workflowet oavsett vilken fil som ändrades (ingen
   path-filtrering) — precis som kickoff-specen (Del C) anger.
 
+## Utvecklingsmiljö
+
+Primär utvecklingsdator (sedan 2026-08-15): **CachyOS** (Arch-baserad Linux), shell **fish** — inte
+bash, så heredoc-syntax som `cat >> file << 'EOF'` fungerar inte här; använd en editor eller
+`echo "..." >> file` istället. AUR-hjälpare: **paru** (inte yay). SSH-alias i `~/.ssh/config`: `unraid`
+(lokal IP, 192.168.1.142) och `unraid-ts` (Tailscale, tower.tail38b3cd.ts.net) — använd `ssh unraid`/
+`ssh unraid-ts` istället för att skriva ut hela SSH-kommandot varje gång (se "Unraid-server" nedan).
+Tailscale är **inte** installerat på denna maskin ännu (medvetet uppskjutet) — `unraid`-aliaset
+(lokal IP) är därför den primära vägen till servern tills vidare. Den tidigare Windows-primärdatorn är
+ersatt av denna CachyOS-maskin; en andra (sekundär) Windows-dator finns dock kvar och används
+fortfarande — Android-releasebygget (`assembleRelease`, se "Release build" ovan) sker fortsatt där
+tills en motsvarande Android Studio/Gradle-uppsättning finns bekräftad på CachyOS-maskinen.
+
 ## Unraid-server (referens/backup, appen körs inte här)
-- SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net`
-- SSH via lokal IP (fast/statisk): `ssh root@192.168.1.142`
+- SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net` (eller `ssh unraid-ts`, se "Utvecklingsmiljö" ovan)
+- SSH via lokal IP (fast/statisk): `ssh root@192.168.1.142` (eller `ssh unraid`, se "Utvecklingsmiljö" ovan)
 - Repot finns speglat på servern under `/mnt/user/appdata/BrickRadar` enbart som referens/backup — byggs och körs ALDRIG där (Android-utveckling kräver Android Studio/Gradle, inte en NAS-miljö).
 - Git-autentisering på servern: deploy key (read-only), SSH-alias `github.com-apk` i serverns `~/.ssh/config`, pekar på `~/.ssh/deploy_brickradar_apk`. Remote-URL: `git@github.com-apk:Sivan87/BrickRadar.git`.
 - Systerrepot `mould-king-tracker` (backend, körs live på servern via Docker) har motsvarande setup med SSH-alias `github.com-mkt` och sitt eget CLAUDE.md.
