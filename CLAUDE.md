@@ -369,27 +369,14 @@ redan är det.
   path-filtrering) — precis som kickoff-specen (Del C) anger.
 
 ## Utvecklingsmiljö
-
-Primär utvecklingsdator (sedan 2026-08-15): **CachyOS** (Arch-baserad Linux), shell **fish** — inte
-bash, så heredoc-syntax som `cat >> file << 'EOF'` fungerar inte här; använd en editor eller
-`echo "..." >> file` istället. AUR-hjälpare: **paru** (inte yay). SSH-alias i `~/.ssh/config`: `unraid`
-(lokal IP, 192.168.1.142) och `unraid-ts` (Tailscale, tower.tail38b3cd.ts.net) — använd `ssh unraid`/
-`ssh unraid-ts` istället för att skriva ut hela SSH-kommandot varje gång (se "Unraid-server" nedan).
-Tailscale är **inte** installerat på denna maskin ännu (medvetet uppskjutet) — `unraid`-aliaset
-(lokal IP) är därför den primära vägen till servern tills vidare. Den tidigare Windows-primärdatorn är
-ersatt av denna CachyOS-maskin; en andra (sekundär) Windows-dator finns dock kvar och används
-fortfarande — Android-releasebygget (`assembleRelease`, se "Release build" ovan) sker fortsatt där
-tills en motsvarande Android Studio/Gradle-uppsättning finns bekräftad på CachyOS-maskinen.
-
-**Sandbox-notis:** SSH mot Unraid-servern via lokal IP (192.168.1.142) fungerar INTE genom sandboxens
-nätverksproxy, även om domänen är listad i allowedDomains — sandboxar blockerar som standard privata
-IP-intervall (192.168.0.0/16 m.fl.) oavsett vitlistning. Tailscale-aliaset (`unraid-ts`) skulle
-troligen fungera eftersom det är ett riktigt domännamn, men Tailscale är medvetet inte installerat på
-denna maskin. Kör därför alltid SSH/deploy-kommandon mot Unraid manuellt utanför sandboxen (ge
-kommandot till användaren att köra själv), försök inte routa dem genom sandbox-proxyn.
+Primär utvecklingsdator kör Windows (tidigare testkördes CachyOS/Linux på samma fysiska maskin under en kort period, men den är nu omformaterad tillbaka till Windows — bortse från ev. kvarvarande fish-shell/paru/Linux-specifika referenser om sådana dyker upp i äldre commits).
+- Shell: PowerShell (inte fish/bash)
+- SSH: ingen ~/.ssh/config-alias bekräftad ännu på denna Windows-installation — använd fullständiga SSH-kommandon (`ssh root@tower.tail38b3cd.ts.net` eller `ssh root@192.168.1.142`) tills alias eventuellt sätts upp igen
+- Sandbox-notisen om att SSH mot lokal IP inte routar genom sandbox-proxyn gäller Linux/CachyOS-sandboxen specifikt — relevans för Windows är oklar, `/sandbox`-kommandot stöddes inte tidigare på ren Windows (endast macOS/Linux/WSL2)
+- Den sekundära Windows-datorn finns fortfarande kvar och används, bygger fortsatt `assembleRelease`
 
 ## Unraid-server (referens/backup, appen körs inte här)
-- SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net` (eller `ssh unraid-ts`, se "Utvecklingsmiljö" ovan)
+- SSH via Tailscale: `ssh root@tower.tail38b3cd.ts.net` (se "Utvecklingsmiljö" ovan)
 - SSH via lokal IP (fast/statisk): `ssh root@192.168.1.142` (eller `ssh unraid`, se "Utvecklingsmiljö" ovan)
 - Repot finns speglat på servern under `/mnt/user/appdata/BrickRadar` enbart som referens/backup — byggs och körs ALDRIG där (Android-utveckling kräver Android Studio/Gradle, inte en NAS-miljö).
 - Git-autentisering på servern: deploy key (read-only), SSH-alias `github.com-apk` i serverns `~/.ssh/config`, pekar på `~/.ssh/deploy_brickradar_apk`. Remote-URL: `git@github.com-apk:Sivan87/BrickRadar.git`.
