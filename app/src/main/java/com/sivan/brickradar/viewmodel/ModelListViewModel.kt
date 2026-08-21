@@ -49,6 +49,18 @@ class ModelListViewModel @JvmOverloads constructor(
     private val _viewMode = MutableStateFlow(ListViewMode.LIST)
     val viewMode: StateFlow<ListViewMode> = _viewMode.asStateFlow()
 
+    // Issue #21 i Sivan87/BrickRadar (mirroring mould-king-tracker issue #16)
+    // — rent klientsidan över redan hämtade uiState.models, precis som
+    // webbens motsvarighet (static/app.js: getDisplayModels). Ingen ny
+    // nätverksrequest per tecken, filtreras inom den redan aktiva status-/
+    // kategorifiltreringen (som redan görs server-side, se loadModels).
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
     // Driver filterchipsens räknare (Alla/Bevakar/Äger m.fl.) — se StatsResponse.
     // Null tills första hämtningen lyckas; UI:t visar då bara etiketten utan siffra.
     private val _stats = MutableStateFlow<StatsResponse?>(null)

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -41,6 +42,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -136,6 +138,7 @@ fun ModelListScreen(
     val filters by viewModel.filters.collectAsState()
     val viewMode by viewModel.viewMode.collectAsState()
     val stats by viewModel.stats.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val modelCreated by modelCreatedFlow.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -155,6 +158,7 @@ fun ModelListScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             ListHeader(viewMode = viewMode, onViewModeChange = viewModel::setViewMode)
+            SearchField(query = searchQuery, onQueryChange = viewModel::setSearchQuery)
             FilterBar(
                 filters = filters,
                 categories = categories,
@@ -170,12 +174,13 @@ fun ModelListScreen(
                     if (state.isRefreshing) {
                         LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = AccentGold)
                     }
-                    if (state.models.isEmpty()) {
+                    val displayedModels = state.models.filter { matchesSearch(it, searchQuery, categories) }
+                    if (displayedModels.isEmpty()) {
                         EmptyResultView()
                     } else if (viewMode == ListViewMode.GRID) {
-                        ModelGrid(models = state.models, onModelClick = onModelClick)
+                        ModelGrid(models = displayedModels, onModelClick = onModelClick)
                     } else {
-                        ModelList(models = state.models, categories = categories, onModelClick = onModelClick)
+                        ModelList(models = displayedModels, categories = categories, onModelClick = onModelClick)
                     }
                 }
             }
@@ -237,6 +242,23 @@ private fun ViewModeToggleButton(selected: Boolean, glyph: String, description: 
             color = if (selected) AppBackground else TextMuted,
         )
     }
+}
+
+// Issue #21 i Sivan87/BrickRadar (mirroring mould-king-tracker issue #16) —
+// centrerat sökfält högst upp i listvyn, ovanför status-/kategorifiltren.
+@Composable
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        placeholder = { Text("Sök på namn, märke, modellnummer eller kategori...") },
+        leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
+        singleLine = true,
+        shape = RoundedCornerShape(24.dp),
+    )
 }
 
 @Composable
@@ -602,6 +624,18 @@ private fun categoryLabel(category: String?, categories: List<Category>): String
     val key = category ?: UNCATEGORIZED_KEY
     return categories.firstOrNull { it.category == key }?.label
         ?: key.replaceFirstChar { it.uppercase() }
+}
+
+// Matchar mot namn, märke, modellnummer och kategorietikett — case-
+// insensitive delsträngsmatchning, samma fyra fält som webbens getDisplayModels
+// (mould-king-tracker/static/app.js).
+private fun matchesSearch(model: Model, query: String, categories: List<Category>): Boolean {
+    val q = query.trim().lowercase()
+    if (q.isEmpty()) return true
+    val haystack = listOfNotNull(model.name, model.brand, model.modelNumber, categoryLabel(model.category, categories))
+        .joinToString(" ")
+        .lowercase()
+    return haystack.contains(q)
 }
 
 // Fas 16 (issue #12, uppfoljning): jamfort direkt mot BrickRadar Rutvy
