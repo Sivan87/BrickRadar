@@ -281,6 +281,44 @@ använder den som svarar snabbast, istället för att välja en enda hårdkodad 
     `BackendResolver`/`RetrofitClient`. Rättat i testservern (matchande `{}`/`{"categories":[]}`-
     former), ingen ändring i appens produktionskod behövdes eller gjordes för detta.
 
+## Fas 22 — Sökfält: tillagt, sedan gjort expanderbart (issues #21, #22, 2026-08-21/23)
+
+Två direkt relaterade jobb, ingen egen CLAUDE.md-post skrevs för det första förrän nu:
+
+- **Issue #21 (2026-08-21, commit `a12c583`):** appen saknade helt en textsökning i listvyn
+  (till skillnad från webb-UI:t, som redan hade `#searchInput` sedan tidigare) — ett alltid
+  synligt `OutlinedTextField` lades till i `ModelListScreen.kt`, centrerat högst upp mellan
+  `ListHeader` och `FilterBar`. Live-filtrering rent klientsidan (`matchesSearch`, case-
+  insensitive delsträngsmatchning mot namn/märke/modellnummer/kategorietikett), ovanpå de
+  redan server-side filtrerade status-/kategorifiltren. Söktexten ligger i
+  `ModelListViewModel.searchQuery: StateFlow<String>`/`setSearchQuery(...)`.
+- **Issue #22 (2026-08-23), uppföljning:** det alltid synliga fältet tog för mycket permanent
+  plats — bytt till en expanderbar sökikon. `ListHeader` fick en ny `IconButton` (sök-lupp ↔ X,
+  samma knapp togglar) bredvid list-/rutvy-växlaren; `SearchField` (oförändrad live-
+  filtreringslogik, `matchesSearch`/`searchQuery` orörda) visas nu bara inuti en
+  `AnimatedVisibility(expandVertically()+fadeIn() / shrinkVertically()+fadeOut())` styrd av ett
+  nytt, rent lokalt `searchExpanded`-flagga (`remember { mutableStateOf(false) }`, samma mönster
+  som `SortMenuButton`s egna `expanded`-state — medvetet INTE lagt i ViewModel:en, då det inte
+  behöver överleva konfigurationsändring/navigation, bara vara sant/falskt medan skärmen är
+  synlig). Auto-fokus + tangentbord vid expansion via `FocusRequester` +
+  `LocalSoftwareKeyboardController`. Stängning (X-knappen) rensar även söktexten
+  (`setSearchQuery("")`) — ett medvetet val för ett konsekvent, förutsägbart nollställt läge
+  varje gång fältet öppnas igen, eftersom issuen själv lämnade det öppet ("bestäm det som känns
+  mest naturligt, men var konsekvent").
+- **Ingen `AnimatedVisibility`/animerad expand-collapse fanns tidigare någonstans i kodbasen**
+  (bekräftat via grep innan implementation) — detta är det första stället som använder mönstret,
+  inget lokalt konventionsval fanns att följa. `androidx.compose.animation`-API:erna
+  (`AnimatedVisibility`/`expandVertically`/`shrinkVertically`/`fadeIn`/`fadeOut`) och
+  `LocalSoftwareKeyboardController` är stabila (icke-experimentella) sedan långt innan projektets
+  Compose BOM (`2024.09.00`) — inget nytt `@OptIn` eller ny gradle-dependency behövdes, båda
+  kommer transitivt via de redan tillagda `material3`/`ui`-artefakterna.
+- **INTE byggverifierat denna session** — ingen JDK/Android Studio hittades på den maskin detta
+  jobb kördes från (till skillnad från de tidigare Fas-jobbens "sekundära Windows-dator", se
+  "Utvecklingsmiljö" nedan), så `./gradlew assembleDebug` kunde inte köras lokalt. Koden är
+  manuellt genomläst för syntax-/importfel, men bör köras genom en riktig lokal build (eller
+  bekräftas via nästa CI-releasebygge, som redan triggas automatiskt av pushen till `main`, se
+  "Så här uppdaterar du appen" nedan) innan den litas på fullt ut.
+
 ## Implementerat
 - Listvy: alla modeller, bild/namn/status/kr-per-del med färgindikator, tryck → detaljvy
 - Detaljvy: full modellinfo + alla källor/priser

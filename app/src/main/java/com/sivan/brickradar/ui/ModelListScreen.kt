@@ -1,5 +1,10 @@
 package com.sivan.brickradar.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,9 +64,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -142,6 +151,21 @@ fun ModelListScreen(
     val modelCreated by modelCreatedFlow.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Issue #22 i Sivan87/BrickRadar — sökfältet ska vara en expanderbar ikon,
+    // inte alltid synligt. Expand/collapse är rent UI-tillstånd (samma mönster
+    // som SortMenuButtons lokala `expanded`-flagga nedan) — själva söktexten
+    // (searchQuery) lever kvar i ViewModel:en som innan, oförändrat.
+    var searchExpanded by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(searchExpanded) {
+        if (searchExpanded) {
+            searchFocusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     LaunchedEffect(modelCreated) {
         if (modelCreated) {
             onModelCreatedConsumed()
@@ -157,8 +181,33 @@ fun ModelListScreen(
         bottomBar = { BottomNavBar(onAddModelClick = onAddModelClick, onStatistikClick = onStatistikClick) },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ListHeader(viewMode = viewMode, onViewModeChange = viewModel::setViewMode)
-            SearchField(query = searchQuery, onQueryChange = viewModel::setSearchQuery)
+            ListHeader(
+                viewMode = viewMode,
+                onViewModeChange = viewModel::setViewMode,
+                searchExpanded = searchExpanded,
+                onToggleSearch = {
+                    if (searchExpanded) {
+                        // Stänger via samma ikon (nu ett X) — rensar sökningen
+                        // vid stängning för ett konsekvent, förutsägbart läge
+                        // varje gång fältet öppnas på nytt.
+                        searchExpanded = false
+                        viewModel.setSearchQuery("")
+                    } else {
+                        searchExpanded = true
+                    }
+                },
+            )
+            AnimatedVisibility(
+                visible = searchExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                SearchField(
+                    query = searchQuery,
+                    onQueryChange = viewModel::setSearchQuery,
+                    focusRequester = searchFocusRequester,
+                )
+            }
             FilterBar(
                 filters = filters,
                 categories = categories,
@@ -189,7 +238,12 @@ fun ModelListScreen(
 }
 
 @Composable
-private fun ListHeader(viewMode: ListViewMode, onViewModeChange: (ListViewMode) -> Unit) {
+private fun ListHeader(
+    viewMode: ListViewMode,
+    onViewModeChange: (ListViewMode) -> Unit,
+    searchExpanded: Boolean,
+    onToggleSearch: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -203,24 +257,36 @@ private fun ListHeader(viewMode: ListViewMode, onViewModeChange: (ListViewMode) 
             color = TextPrimary,
         )
         Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(CardBorder)
-                .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ViewModeToggleButton(
-                selected = viewMode == ListViewMode.LIST,
-                glyph = "≡",
-                description = "Listvy",
-                onClick = { onViewModeChange(ListViewMode.LIST) },
-            )
-            ViewModeToggleButton(
-                selected = viewMode == ListViewMode.GRID,
-                glyph = "▦",
-                description = "Rutvy",
-                onClick = { onViewModeChange(ListViewMode.GRID) },
-            )
+            IconButton(onClick = onToggleSearch) {
+                Icon(
+                    imageVector = if (searchExpanded) Icons.Filled.Close else Icons.Filled.Search,
+                    contentDescription = if (searchExpanded) "Stäng sökning" else "Sök",
+                    tint = TextMuted,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(CardBorder)
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ViewModeToggleButton(
+                    selected = viewMode == ListViewMode.LIST,
+                    glyph = "≡",
+                    description = "Listvy",
+                    onClick = { onViewModeChange(ListViewMode.LIST) },
+                )
+                ViewModeToggleButton(
+                    selected = viewMode == ListViewMode.GRID,
+                    glyph = "▦",
+                    description = "Rutvy",
+                    onClick = { onViewModeChange(ListViewMode.GRID) },
+                )
+            }
         }
     }
 }
@@ -246,14 +312,18 @@ private fun ViewModeToggleButton(selected: Boolean, glyph: String, description: 
 
 // Issue #21 i Sivan87/BrickRadar (mirroring mould-king-tracker issue #16) —
 // centrerat sökfält högst upp i listvyn, ovanför status-/kategorifiltren.
+// Issue #22: fältet visas numera bara när ListHeaders sökikon expanderat det
+// (se ModelListScreen ovan) — `focusRequester` kopplar in den auto-fokusering
+// som redan triggas därifrån.
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, focusRequester: FocusRequester) {
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .focusRequester(focusRequester),
         placeholder = { Text("Sök på namn, märke, modellnummer eller kategori...") },
         leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
         singleLine = true,
