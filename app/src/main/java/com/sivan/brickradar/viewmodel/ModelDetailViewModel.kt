@@ -174,14 +174,22 @@ class ModelDetailViewModel @JvmOverloads constructor(
         }
     }
 
-    fun updateModel(name: String, pieceCount: Int, category: String, notes: String) {
+    fun updateModel(
+        name: String,
+        pieceCount: Int,
+        category: String,
+        notes: String,
+        brand: String,
+        modelNumber: String,
+        imageUrl: String,
+    ) {
         val current = _uiState.value
         if (current !is ModelDetailUiState.Loaded || current.isSavingEdit) return
 
         val modelId = current.model.id
         _uiState.value = current.copy(isSavingEdit = true)
         viewModelScope.launch {
-            when (val result = repository.updateModel(modelId, name, pieceCount, category, notes)) {
+            when (val result = repository.updateModel(modelId, name, pieceCount, category, notes, brand, modelNumber, imageUrl)) {
                 is ApiResult.Success -> {
                     _uiState.value = ModelDetailUiState.Loaded(result.data)
                     _events.emit(ModelDetailEvent.Saved("Sparat", isEditSave = true))

@@ -85,6 +85,7 @@ import coil.compose.AsyncImage
 import com.sivan.brickradar.model.COUNTRIES
 import com.sivan.brickradar.model.CURRENCIES
 import com.sivan.brickradar.model.Category
+import com.sivan.brickradar.model.KNOWN_BRANDS
 import com.sivan.brickradar.model.MissingPart
 import com.sivan.brickradar.model.MissingPartsResponse
 import com.sivan.brickradar.model.Model
@@ -224,7 +225,9 @@ fun ModelDetailScreen(
                             model = state.model,
                             categories = categories,
                             isSaving = state.isSavingEdit,
-                            onSave = { name, pieceCount, category, notes -> viewModel.updateModel(name, pieceCount, category, notes) },
+                            onSave = { name, pieceCount, category, notes, brand, modelNumber, imageUrl ->
+                                viewModel.updateModel(name, pieceCount, category, notes, brand, modelNumber, imageUrl)
+                            },
                             onCancel = { isEditing = false },
                         )
                     } else {
@@ -1553,18 +1556,39 @@ private fun EditableModelDetail(
     model: Model,
     categories: List<Category>,
     isSaving: Boolean,
-    onSave: (name: String, pieceCount: Int, category: String, notes: String) -> Unit,
+    onSave: (
+        name: String,
+        pieceCount: Int,
+        category: String,
+        notes: String,
+        brand: String,
+        modelNumber: String,
+        imageUrl: String,
+    ) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember(model.id) { mutableStateOf(model.name ?: "") }
     var pieceCountText by remember(model.id) { mutableStateOf(model.pieceCount?.toString() ?: "") }
     var selectedCategory by remember(model.id) { mutableStateOf(model.category ?: UNCATEGORIZED_KEY) }
     var notes by remember(model.id) { mutableStateOf(model.notes ?: "") }
+    // Issue #23 (mirroring mould-king-tracker issue #18) — märke/modellnummer/
+    // bildlänk gick tidigare bara att sätta vid modelltillägg (AddModelScreen),
+    // inte redigera här efteråt. Samma "en Redigera-knapp låser upp alla
+    // fält"-form som redan fanns för namn/delantal/kategori/anteckningar,
+    // bara utökad — inget nytt UI-mönster, se ModelUpdateRequest för varför
+    // alla tre är icke-nullbara strängar (tom sträng = "saknas/ingen bild").
+    var brand by remember(model.id) { mutableStateOf(model.brand ?: "") }
+    var modelNumber by remember(model.id) { mutableStateOf(model.modelNumber) }
+    var imageUrl by remember(model.id) { mutableStateOf(model.imageUrl ?: "") }
 
     val nameError = name.isBlank()
     val pieceCount = pieceCountText.toIntOrNull()
     val pieceCountError = pieceCount == null || pieceCount <= 0
-    val canSave = !nameError && !pieceCountError && !isSaving
+    // Märke krävs (samma regel som POST /models redan tillämpar vid
+    // modelltillägg, "brand krävs") — modellnummer/bildlänk är valfria
+    // (tom sträng är ett giltigt "saknas"-värde, se ModelUpdateRequest).
+    val brandError = brand.isBlank()
+    val canSave = !nameError && !pieceCountError && !brandError && !isSaving
 
     Column(
         modifier = Modifier
@@ -1581,6 +1605,34 @@ private fun EditableModelDetail(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = modelNumber,
+            onValueChange = { modelNumber = it },
+            label = { Text("Modellnummer") },
+            supportingText = { Text("Valfritt — lämna tomt för ett MOC/anpassat set") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = brand,
+            onValueChange = { brand = it },
+            label = { Text("Märke") },
+            isError = brandError,
+            supportingText = { if (brandError) Text("Märke får inte vara tomt") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            KNOWN_BRANDS.forEach { known ->
+                DetailPillChip(selected = brand == known, label = known, onClick = { brand = known })
+            }
+        }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
             value = pieceCountText,
@@ -1609,6 +1661,16 @@ private fun EditableModelDetail(
         }
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
+            value = imageUrl,
+            onValueChange = { imageUrl = it },
+            label = { Text("Bildlänk") },
+            placeholder = { Text("https://...") },
+            supportingText = { Text("Valfritt") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
             value = notes,
             onValueChange = { notes = it },
             label = { Text("Anteckningar") },
@@ -1618,7 +1680,11 @@ private fun EditableModelDetail(
         Spacer(modifier = Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
-                onClick = { pieceCount?.let { onSave(name.trim(), it, selectedCategory, notes.trim()) } },
+                onClick = {
+                    pieceCount?.let {
+                        onSave(name.trim(), it, selectedCategory, notes.trim(), brand.trim(), modelNumber.trim(), imageUrl.trim())
+                    }
+                },
                 enabled = canSave,
             ) {
                 if (isSaving) {

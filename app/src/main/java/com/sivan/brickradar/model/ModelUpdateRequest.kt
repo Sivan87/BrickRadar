@@ -15,6 +15,22 @@ data class ModelUpdateRequest(
     // kategori eftersom det redan är en del av _apply_model_fields' delade
     // fältvalidering och inte behöver en egen dedikerad endpoint.
     val notes: String,
+    // Issue #23 (mirroring mould-king-tracker issue #18) — märke/modellnummer/
+    // bildlänk gick tidigare bara att sätta en gång, vid modelltillägg (se
+    // AddModelRequest); nu redigerbara i samma formulär som namn/delantal/
+    // kategori/anteckningar, samma "en Redigera-knapp låser upp alla fält"-UX
+    // som webbens motsvarande omdesign (mould-king-tracker#18-kommentaren).
+    // Både brand och modelNumber är icke-nullbara (tom sträng, inte null, är
+    // det giltiga "saknas"-värdet — modelNumber matchar db-kolumnens TEXT NOT
+    // NULL, brand valideras icke-tom av UI:t, se EditableModelDetail). imageUrl
+    // är av samma skäl också en icke-nullbar sträng (tom = "ingen bild"): Moshi
+    // (KotlinJsonAdapterFactory) utelämnar null-fält vid serialisering som
+    // standard, så ett nullbart fält satt till null hade tyst INTE skickats
+    // med alls (och alltså inte rensat en befintlig bild) — se motsvarande
+    // normalisering av en tom sträng till NULL i api.py: _apply_model_fields.
+    val brand: String,
+    @Json(name = "model_number") val modelNumber: String,
+    @Json(name = "image_url") val imageUrl: String,
 )
 
 // PUT/PATCH /models/{id} delar samma fältvalidering (_apply_model_fields,

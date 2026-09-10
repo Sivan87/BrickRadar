@@ -89,8 +89,17 @@ class ModelRepository(
         api.updateStatus(id, StatusUpdateRequest(status))
     }
 
-    suspend fun updateModel(id: Int, name: String, pieceCount: Int, category: String, notes: String): ApiResult<Model> = safeCall {
-        api.updateModel(id, ModelUpdateRequest(name, pieceCount, category, notes))
+    suspend fun updateModel(
+        id: Int,
+        name: String,
+        pieceCount: Int,
+        category: String,
+        notes: String,
+        brand: String,
+        modelNumber: String,
+        imageUrl: String,
+    ): ApiResult<Model> = safeCall {
+        api.updateModel(id, ModelUpdateRequest(name, pieceCount, category, notes, brand, modelNumber, imageUrl))
     }
 
     // POST /api/models ignorerar helt ett ev. category-fält i body:n — servern
